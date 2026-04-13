@@ -53,6 +53,7 @@ export class ProcessTranslationJobUseCase {
         job.originalVideoPath,
         translatedAudioPath,
         translatedVideoPath,
+        { blurSubtitles: job.blurSubtitles }
       );
 
       // Done

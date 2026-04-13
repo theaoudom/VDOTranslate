@@ -5,7 +5,7 @@ import type { ITranslationJobRepository } from "@/domain/repositories/ITranslati
 export class CreateTranslationJobUseCase {
   constructor(private readonly jobRepository: ITranslationJobRepository) {}
 
-  async execute(originalVideoPath: string, targetLanguage: string): Promise<TranslationJob> {
+  async execute(originalVideoPath: string, targetLanguage: string, blurSubtitles: boolean): Promise<TranslationJob> {
     const job: TranslationJob = {
       id: uuidv4(),
       status: "pending",
@@ -19,6 +19,7 @@ export class CreateTranslationJobUseCase {
       transcript: null,
       translatedText: null,
       error: null,
+      blurSubtitles,
       createdAt: new Date(),
       updatedAt: new Date(),
     };

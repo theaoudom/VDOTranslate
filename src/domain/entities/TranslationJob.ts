@@ -21,6 +21,7 @@ export interface TranslationJob {
   transcript: string | null;
   translatedText: string | null;
   error: string | null;
+  blurSubtitles: boolean;
   createdAt: Date;
   updatedAt: Date;
 }

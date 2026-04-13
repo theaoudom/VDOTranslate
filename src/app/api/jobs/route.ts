@@ -17,11 +17,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "video file is required" }, { status: 400 });
     }
 
+    const blurSubtitles = formData.get("blurSubtitles") === "true";
+
     const container = buildContainer();
     const uploadsDir = getUploadsDir();
 
     // Create job first with a placeholder path so we can get the generated UUID
-    const job = await container.createJob.execute("", targetLanguage);
+    const job = await container.createJob.execute("", targetLanguage, blurSubtitles);
 
     // Save directly to the final destination path to avoid Windows EBUSY locking during rename
     const finalVideoPath = path.join(uploadsDir, `${job.id}_original${path.extname(videoFile.name)}`);

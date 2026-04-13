@@ -11,6 +11,7 @@ export default function Home() {
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [targetLanguage, setTargetLanguage] = useState("");
+  const [blurSubtitles, setBlurSubtitles] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -24,6 +25,7 @@ export default function Home() {
       const formData = new FormData();
       formData.append("video", file);
       formData.append("targetLanguage", targetLanguage);
+      formData.append("blurSubtitles", blurSubtitles.toString());
 
       const res = await fetch("/api/jobs", {
         method: "POST",
@@ -77,6 +79,23 @@ export default function Home() {
             value={targetLanguage}
             onChange={setTargetLanguage}
           />
+
+          <label className="flex items-center gap-3 mt-4 cursor-pointer group">
+            <div className="relative flex items-center justify-center">
+              <input 
+                type="checkbox"
+                checked={blurSubtitles}
+                onChange={(e) => setBlurSubtitles(e.target.checked)}
+                className="w-5 h-5 appearance-none border-2 border-brand-500/50 rounded-md bg-surface-200 checked:bg-brand-500 checked:border-brand-500 transition-all peer"
+              />
+              <svg className="absolute w-3.5 h-3.5 text-white opacity-0 peer-checked:opacity-100 transition-opacity pointer-events-none" viewBox="0 0 14 10" fill="none">
+                <path d="M1 5L5 9L13 1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+            <span className="text-sm font-medium text-gray-300 group-hover:text-white transition-colors">
+              Blur Original Subtitles (Removes burned-in text)
+            </span>
+          </label>
         </motion.div>
 
         {error && (

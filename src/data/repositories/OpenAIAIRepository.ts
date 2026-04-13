@@ -363,8 +363,10 @@ Return strict JSON exactly matching this format: { "results": [ { "id": number, 
 
       // amix requires all streams mapped
       const mixInputs = filterGroups.map((_, i) => `[a${i}]`).join('');
-      // Removed normalize=0 as it is not supported in older ffmpeg versions
-      filterGroups.push(`${mixInputs}amix=inputs=${filterGroups.length}:duration=longest[out]`);
+      // amix automatically divides the overall volume by the number of inputs (1/N).
+      // Since we had to remove normalize=0, we must manually multiply the volume 
+      // by N after mixing to perfectly restore it to 100% loudness!
+      filterGroups.push(`${mixInputs}amix=inputs=${filterGroups.length}:duration=longest[mixed];[mixed]volume=${filterGroups.length}[out]`);
 
       command.complexFilter(filterGroups.join('; '), 'out')
         .outputOptions('-ac 2') // stereo
