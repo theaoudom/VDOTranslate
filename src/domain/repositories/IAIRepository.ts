@@ -1,10 +1,19 @@
+export interface TranscriptionSegment {
+  text: string;
+  start: number;
+  end: number;
+  speaker: string;
+  gender?: "male" | "female" | "unknown";
+}
+
 export interface TranscriptionResult {
   text: string;
   language: string; // detected language code
+  segments: TranscriptionSegment[];
 }
 
 export interface IAIRepository {
   transcribe(audioPath: string): Promise<TranscriptionResult>;
-  translate(text: string, targetLanguage: string): Promise<string>;
-  synthesize(text: string, language: string, outputPath: string): Promise<void>;
+  translate(segments: TranscriptionSegment[], targetLanguage: string): Promise<TranscriptionSegment[]>;
+  synthesize(segments: TranscriptionSegment[], language: string, outputPath: string): Promise<void>;
 }

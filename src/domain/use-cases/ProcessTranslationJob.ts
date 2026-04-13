@@ -23,7 +23,7 @@ export class ProcessTranslationJobUseCase {
 
       // Step 2: Transcribe audio & detect language
       await this.jobRepository.updateStatus(jobId, "transcribing", 30);
-      const { text: transcript, language: sourceLanguage } =
+      const { text: transcript, language: sourceLanguage, segments } =
         await this.aiRepository.transcribe(audioPath);
       await this.jobRepository.update(jobId, { transcript, sourceLanguage });
       
@@ -31,10 +31,11 @@ export class ProcessTranslationJobUseCase {
 
       // Step 3: Translate text
       await this.jobRepository.updateStatus(jobId, "translating", 55);
-      const translatedText = await this.aiRepository.translate(
-        transcript,
+      const translatedSegments = await this.aiRepository.translate(
+        segments,
         job.targetLanguage,
       );
+      const translatedText = translatedSegments.map(s => s.text).join(" ");
       await this.jobRepository.update(jobId, { translatedText });
       
       console.log(`\n\n=== TRANSLATED SCRIPT (${job.targetLanguage}) ===\n${translatedText}\n=======================================\n`);
@@ -42,7 +43,7 @@ export class ProcessTranslationJobUseCase {
       // Step 4: Text-to-speech synthesis
       await this.jobRepository.updateStatus(jobId, "synthesizing", 75);
       const translatedAudioPath = path.join(uploadsDir, `${jobId}_translated.mp3`);
-      await this.aiRepository.synthesize(translatedText, job.targetLanguage, translatedAudioPath);
+      await this.aiRepository.synthesize(translatedSegments, job.targetLanguage, translatedAudioPath);
       await this.jobRepository.update(jobId, { translatedAudioPath });
 
       // Step 5: Merge translated audio back into video

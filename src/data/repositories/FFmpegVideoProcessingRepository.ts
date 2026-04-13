@@ -26,12 +26,12 @@ export class FFmpegVideoProcessingRepository implements IVideoProcessingReposito
       ffmpeg(videoPath)
         .input(audioPath)
         // Map video stream from input 0, audio stream from input 1
+        // (Replacing the original audio completely to prevent hearing the original language)
         .outputOptions([
           "-map 0:v:0",
           "-map 1:a:0",
           "-c:v copy",
-          "-c:a aac",
-          "-shortest",
+          "-c:a aac"
         ])
         .save(outputPath)
         .on("end", () => resolve())
