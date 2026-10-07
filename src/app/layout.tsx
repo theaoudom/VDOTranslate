@@ -1,33 +1,28 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Archivo, IBM_Plex_Mono, Noto_Sans_Khmer } from "next/font/google";
 import "./globals.css";
+import "@/presentation/samesay/samesay.css";
+import { ToastProvider } from "@/presentation/samesay/Toast";
+import { themeBootScript } from "@/presentation/samesay/ThemeToggle";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+// Same families and weights as the confirmed prototype.
+const archivo = Archivo({ subsets: ["latin"], weight: ["400", "500", "600", "700", "800"], variable: "--font-archivo", display: "swap" });
+const plexMono = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500", "600"], variable: "--font-plex-mono", display: "swap" });
+const khmer = Noto_Sans_Khmer({ subsets: ["khmer"], weight: ["400", "600"], variable: "--font-khmer", display: "swap" });
 
 export const metadata: Metadata = {
-  title: "AI Video Translator",
-  description: "Seamlessly translate video speech using AI",
+  title: { default: "Samesay", template: "%s · Samesay" },
+  description: "Translate any video and keep it sounding like the original: each speaker in their own voice, every line on time, ready to post.",
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={inter.variable}>
-      <body className="antialiased font-sans">
-        {/* Decorative background elements */}
-        <div className="fixed inset-0 overflow-hidden pointer-events-none -z-10">
-          <div className="absolute -top-40 -right-40 w-96 h-96 bg-brand-500/20 rounded-full blur-[120px] animate-pulse-slow" />
-          <div className="absolute top-40 -left-40 w-80 h-80 bg-accent-500/10 rounded-full blur-[100px] animate-float" />
-        </div>
-        
-        <main className="min-h-screen flex flex-col items-center justify-center p-4 sm:p-8">
-          <div className="w-full max-w-3xl">
-            {children}
-          </div>
-        </main>
+    <html lang="en" data-theme="light" className={`${archivo.variable} ${plexMono.variable} ${khmer.variable}`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
+      </head>
+      <body>
+        <ToastProvider>{children}</ToastProvider>
       </body>
     </html>
   );

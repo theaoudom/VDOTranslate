@@ -1,11 +1,14 @@
 import type { Config } from "tailwindcss";
 
 const config: Config = {
+  // These names are design-system classes (src/presentation/samesay/samesay.css); keep Tailwind from emitting its own rules for them.
+  blocklist: ["block", "grid", "table", "sticky"],
   content: [
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
-    "./src/presentation/**/*.{js,ts,jsx,tsx,mdx}",
+    "./src/presentation/components/**/*.{js,ts,jsx,tsx,mdx}",
+    "./src/presentation/hooks/**/*.{js,ts,jsx,tsx,mdx}",
   ],
   theme: {
     extend: {

@@ -10,7 +10,6 @@ export const SUPPORTED_LANGUAGES: Language[] = [
   { code: "zh", name: "Chinese (Simplified)", nativeName: "中文", flag: "🇨🇳" },
   { code: "zh-TW", name: "Chinese (Traditional)", nativeName: "繁體中文", flag: "🇹🇼" },
   { code: "km", name: "Khmer", nativeName: "ភាសាខ្មែរ", flag: "🇰🇭" },
-  { code: "th", name: "Thai", nativeName: "ภาษาไทย", flag: "🇹🇭" },
   { code: "vi", name: "Vietnamese", nativeName: "Tiếng Việt", flag: "🇻🇳" },
   { code: "ja", name: "Japanese", nativeName: "日本語", flag: "🇯🇵" },
   { code: "ko", name: "Korean", nativeName: "한국어", flag: "🇰🇷" },

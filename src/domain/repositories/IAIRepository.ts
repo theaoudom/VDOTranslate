@@ -1,3 +1,5 @@
+import type { VoiceKind } from "@/domain/billing/pricing";
+
 export interface TranscriptionSegment {
   text: string;
   start: number;
@@ -12,8 +14,21 @@ export interface TranscriptionResult {
   segments: TranscriptionSegment[];
 }
 
+export interface SynthesizeOptions {
+  /** standard = OpenAI/Google voices, natural = ElevenLabs preset voices, cloned = each speaker's own voice */
+  voice: VoiceKind;
+  /** Original speech audio, used to cut per-speaker samples for cloning */
+  sourceAudioPath?: string | null;
+  /** Only voice this segment (re-voicing one corrected line) */
+  onlyIndex?: number;
+}
+
+export type VoiceAvailability = Record<VoiceKind, boolean>;
+
 export interface IAIRepository {
   transcribe(audioPath: string): Promise<TranscriptionResult>;
   translate(segments: TranscriptionSegment[], targetLanguage: string): Promise<TranscriptionSegment[]>;
-  synthesize(segments: TranscriptionSegment[], language: string, outputPath: string): Promise<void>;
+  synthesizeSegments(segments: TranscriptionSegment[], language: string, outDir: string, options: SynthesizeOptions): Promise<string[]>;
+  stitch(segments: TranscriptionSegment[], files: string[], outputPath: string): Promise<void>;
+  voiceAvailability(): VoiceAvailability;
 }

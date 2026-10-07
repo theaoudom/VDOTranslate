@@ -34,3 +34,6 @@ next-env.d.ts
 
 # additional app directories
 /uploads/
+
+# test outputs from scripts/
+/scripts/out/
