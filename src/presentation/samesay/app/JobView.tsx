@@ -198,19 +198,21 @@ function ResultView({ job, revoicing, onRevoiceStarted }: { job: PublicJob; revo
         <div className="hstack">
           <Link className="btn" href="/app/templates"><LayoutTemplate />Add a template</Link>
           <Link className="btn" href="/app/split"><Scissors />Split into parts</Link>
-          <div className="menu-anchor" ref={menuRef}>
+          {job.hasVideo && <div className="menu-anchor" ref={menuRef}>
             <button className="btn primary" onClick={() => setMenu((m) => !m)} aria-haspopup="menu" aria-expanded={menu}><Download />Download<ChevronDown /></button>
             <div className="menu" role="menu" hidden={!menu}>
               <button role="menuitem" onClick={() => download("video")}><Film />Dubbed video (MP4)</button>
               <button role="menuitem" onClick={() => download("srt")}><Captions />Subtitles (SRT)</button>
               <button role="menuitem" onClick={() => download("audio")}><AudioLines />Voice track only (MP3)</button>
             </div>
-          </div>
+          </div>}
         </div>
       </Head>
       <div className="grid g-2-1">
         <div className="stack">
-          <div className="stack" style={{ gap: "var(--sp-3)" }}>
+          {!job.hasVideo ? (
+            <div className="note"><Info /><div><b>The video files were deleted.</b> Files are kept for 30 days. The transcript below is still here.</div></div>
+          ) : <div className="stack" style={{ gap: "var(--sp-3)" }}>
             <div className={"viewer " + shape}>
               <video
                 ref={video} key={src} src={src} playsInline preload="metadata"
@@ -233,7 +235,7 @@ function ResultView({ job, revoicing, onRevoiceStarted }: { job: PublicJob; revo
                 <button aria-pressed={mode === "dub"} onClick={() => setMode("dub")}>Dubbed</button>
               </div>
             </div>
-          </div>
+          </div>}
           <div className="panel">
             <div className="panel-head"><h3>Transcript</h3><span className="faint t-xs">{lines.length} lines · click to jump, pencil to fix</span></div>
             <div id="tlines">
@@ -257,7 +259,7 @@ function ResultView({ job, revoicing, onRevoiceStarted }: { job: PublicJob; revo
                         <><div className="tr">{l.text}</div><div className="or-t">{l.original}</div></>
                       )}
                     </div>
-                    {!isEditing && <button className="btn ghost icon sm" data-edit aria-label="Fix this line" disabled={revoicing} onClick={() => { setEditing(i); setDraft(l.text); }}><Pencil /></button>}
+                    {!isEditing && <button className="btn ghost icon sm" data-edit aria-label="Fix this line" disabled={revoicing || !job.hasVideo} onClick={() => { setEditing(i); setDraft(l.text); }}><Pencil /></button>}
                   </div>
                 );
               })}

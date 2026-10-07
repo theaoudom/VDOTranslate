@@ -2,6 +2,7 @@ import { REVOICE_LINE_CREDITS } from "@/domain/billing/estimate";
 import type { IAIRepository } from "@/domain/repositories/IAIRepository";
 import type { ICreditRepository } from "@/domain/repositories/ICreditRepository";
 import type { ITranslationJobRepository } from "@/domain/repositories/ITranslationJobRepository";
+import { activeJobs } from "./activeJobs";
 import { toSegments, type ProcessTranslationJobUseCase } from "./ProcessTranslationJob";
 
 export type RevoiceResult = { ok: true } | { ok: false; status: number; message: string };
@@ -25,7 +26,10 @@ export class RevoiceLineUseCase {
       return { ok: false, status: 402, message: "Not enough credits." };
     }
     await this.jobs.update(jobId, { status: "merging", progress: 90 });
-    this.run(job.id, index, clean).catch((e) => console.error(`[Revoice ${jobId}]`, e));
+    activeJobs.add(job.id);
+    this.run(job.id, index, clean)
+      .catch((e) => console.error(`[Revoice ${jobId}]`, e))
+      .finally(() => activeJobs.remove(job.id));
     return { ok: true };
   }
 

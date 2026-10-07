@@ -49,6 +49,18 @@ export class SupabaseJobRepository implements ITranslationJobRepository {
     return (data ?? []).map(fromRow);
   }
 
+  async listUnfinished() {
+    const { data, error } = await db().from("jobs").select("*").not("status", "in", "(completed,failed)").limit(500);
+    if (error) throw new Error(error.message);
+    return (data ?? []).map(fromRow);
+  }
+
+  async listWithFilesBefore(date: Date) {
+    const { data, error } = await db().from("jobs").select("*").lt("created_at", date.toISOString()).neq("files", "{}").limit(500);
+    if (error) throw new Error(error.message);
+    return (data ?? []).map(fromRow);
+  }
+
   async update(id: string, updates: Partial<TranslationJob>) {
     const { data, error } = await db().from("jobs").update({ ...toRow(updates), updated_at: new Date().toISOString() }).eq("id", id).select().single();
     if (error) throw new Error(`Couldn't update the job: ${error.message}`);

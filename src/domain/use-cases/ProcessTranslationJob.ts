@@ -7,6 +7,7 @@ import type { IAudioSeparator } from "@/domain/repositories/IAudioSeparator";
 import type { ICreditRepository } from "@/domain/repositories/ICreditRepository";
 import type { IMediaRepository } from "@/domain/repositories/IMediaRepository";
 import type { ITranslationJobRepository } from "@/domain/repositories/ITranslationJobRepository";
+import { activeJobs } from "./activeJobs";
 
 export class ProcessTranslationJobUseCase {
   constructor(
@@ -18,6 +19,15 @@ export class ProcessTranslationJobUseCase {
   ) {}
 
   async execute(jobId: string): Promise<void> {
+    activeJobs.add(jobId);
+    try {
+      await this.run(jobId);
+    } finally {
+      activeJobs.remove(jobId);
+    }
+  }
+
+  private async run(jobId: string): Promise<void> {
     const job = await this.jobs.findById(jobId);
     if (!job) throw new Error(`Job ${jobId} not found`);
     const dir = job.files.dir!;
