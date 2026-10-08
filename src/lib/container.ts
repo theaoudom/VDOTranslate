@@ -4,6 +4,7 @@ import { OpenAIAIRepository } from "@/data/repositories/OpenAIAIRepository";
 import { ReplicateAudioSeparator } from "@/data/repositories/ReplicateAudioSeparator";
 import { SupabaseCreditRepository, SupabaseJobRepository } from "@/data/repositories/SupabaseRepositories";
 import { ProcessTranslationJobUseCase } from "@/domain/use-cases/ProcessTranslationJob";
+import { ExportWithTemplateUseCase } from "@/domain/use-cases/ExportWithTemplate";
 import { RevoiceLineUseCase } from "@/domain/use-cases/RevoiceLine";
 import { StartTranslationUseCase } from "@/domain/use-cases/StartTranslation";
 
@@ -26,5 +27,6 @@ export function buildContainer() {
     startTranslation: new StartTranslationUseCase(jobs, credits, ai, separator),
     processJob: process,
     revoiceLine: new RevoiceLineUseCase(jobs, credits, ai, process),
+    exportWithTemplate: new ExportWithTemplateUseCase(jobs, credits, media),
   };
 }

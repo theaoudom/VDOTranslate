@@ -1,6 +1,6 @@
 import { estimateDub, type DubOptions } from "@/domain/billing/estimate";
 import { PLANS, type VoiceKind } from "@/domain/billing/pricing";
-import type { TranslationJob } from "@/domain/entities/TranslationJob";
+import type { JobTemplate, TranslationJob } from "@/domain/entities/TranslationJob";
 import type { IAIRepository } from "@/domain/repositories/IAIRepository";
 import type { IAudioSeparator } from "@/domain/repositories/IAudioSeparator";
 import type { ICreditRepository } from "@/domain/repositories/ICreditRepository";
@@ -20,6 +20,7 @@ export interface StartTranslationInput {
   burnSubtitles: boolean;
   blurSubtitles: boolean;
   trimSec: number | null;
+  template: JobTemplate | null;
 }
 
 export type StartResult = { ok: true; job: TranslationJob } | { ok: false; code: "no_account" | "too_long" | "voice_locked" | "voice_unavailable" | "background_unavailable" | "not_enough_credits"; message: string };
@@ -54,7 +55,7 @@ export class StartTranslationUseCase {
     try {
       const now = new Date();
       const job = await this.jobs.create({
-        id: input.jobId, userId: input.userId, name: input.name, durationSec: est.sec, status: "pending", progress: 0,
+        id: input.jobId, userId: input.userId, kind: "dub", template: input.template, name: input.name, durationSec: est.sec, status: "pending", progress: 0,
         sourceLanguage: input.sourceLanguage, targetLanguage: input.targetLanguage, voice: input.voice,
         keepBackground: input.keepBackground, burnSubtitles: input.burnSubtitles, blurSubtitles: input.blurSubtitles,
         trimSec: trim, held: est.total, used: 0, lines: null, speakers: null, error: null,

@@ -100,6 +100,7 @@ export class ProcessTranslationJobUseCase {
       blurSubtitles: job.blurSubtitles,
       subtitles: job.burnSubtitles ? lines.map((l) => ({ start: l.start, end: l.end, text: l.text })) : undefined,
       language: job.targetLanguage,
+      template: job.template ?? undefined,
     });
     if (previous && previous !== files.video) setTimeout(() => fs.rm(previous, { force: true }, () => {}), 60_000);
   }

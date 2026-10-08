@@ -1,4 +1,5 @@
 import type { VoiceKind } from "@/domain/billing/pricing";
+import type { RenderTemplate } from "@/domain/repositories/IMediaRepository";
 
 export type TranslationJobStatus =
   | "pending"
@@ -41,9 +42,15 @@ export interface JobFiles {
   video?: string;
 }
 
+export type JobKind = "dub" | "edit" | "split";
+
+/** The template used for a job, copied when it started (with local asset files). */
+export type JobTemplate = RenderTemplate & { id: string; name: string };
+
 export interface TranslationJob {
   id: string;
   userId: string;
+  kind: JobKind;
   name: string;
   durationSec: number;
   status: TranslationJobStatus;
@@ -62,15 +69,19 @@ export interface TranslationJob {
   lines: TranscriptLine[] | null;
   speakers: SpeakerInfo[] | null;
   error: string | null;
+  template: JobTemplate | null;
   files: JobFiles;
   createdAt: Date;
   updatedAt: Date;
 }
 
 /** What the browser may see about a job. */
-export type PublicJob = Omit<TranslationJob, "files" | "userId"> & { hasVideo: boolean };
+export type PublicJob = Omit<TranslationJob, "files" | "userId" | "template"> & {
+  hasVideo: boolean;
+  template: { name: string; ratio: JobTemplate["ratio"] } | null;
+};
 
 export function toPublicJob(job: TranslationJob): PublicJob {
-  const { files, userId: _userId, ...rest } = job;
-  return { ...rest, hasVideo: Boolean(files.video) };
+  const { files, userId: _userId, template, ...rest } = job;
+  return { ...rest, hasVideo: Boolean(files.video), template: template ? { name: template.name, ratio: template.ratio } : null };
 }

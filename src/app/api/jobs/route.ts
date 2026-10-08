@@ -6,6 +6,7 @@ import { toPublicJob } from "@/domain/entities/TranslationJob";
 import { SUPPORTED_LANGUAGES } from "@/domain/entities/Language";
 import { buildContainer, jobDir } from "@/lib/container";
 import { requireUser } from "@/lib/session";
+import { loadJobTemplate } from "@/lib/templateAssets";
 
 const VOICES: VoiceKind[] = ["cloned", "natural", "standard"];
 
@@ -42,6 +43,7 @@ export async function POST(req: NextRequest) {
     durationSec: meta.durationSec, targetLanguage: target, sourceLanguage: source, voice,
     keepBackground: Boolean(body?.keepBackground), burnSubtitles: Boolean(body?.burnSubtitles), blurSubtitles: Boolean(body?.blurSubtitles),
     trimSec: typeof body?.trimSec === "number" && body.trimSec > 0 ? body.trimSec : null,
+    template: await loadJobTemplate(auth.user.id, body?.templateId),
   });
   if (!result.ok) return NextResponse.json({ error: result.message, code: result.code }, { status: result.code === "not_enough_credits" ? 402 : 400 });
 
