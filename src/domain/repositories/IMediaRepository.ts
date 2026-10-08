@@ -1,7 +1,10 @@
+import type { FrameRatio, TemplateLayer } from "@/domain/entities/Template";
+
 export interface MediaInfo {
   durationSec: number;
   width: number;
   height: number;
+  hasAudio: boolean;
 }
 
 export interface SubtitleCue {
@@ -19,6 +22,15 @@ export interface RenderOptions {
   subtitles?: SubtitleCue[];
   /** Language of the subtitles (picks a font that covers its script). */
   language?: string;
+  /** Brand template: frame crop plus image / video / text layers. */
+  template?: RenderTemplate;
+}
+
+/** A template ready to render: asset layers carry their local file. */
+export interface RenderTemplate {
+  ratio: FrameRatio;
+  pan: number;
+  layers: (TemplateLayer & { file?: string; hasAudio?: boolean })[];
 }
 
 /** Audio/video work done with ffmpeg. */
