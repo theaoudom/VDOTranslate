@@ -32,6 +32,6 @@ export interface IAIRepository {
   stitch(segments: TranscriptionSegment[], files: string[], outputPath: string): Promise<void>;
   /** Which voices can speak this target language (all voices when no language given). */
   voiceAvailability(language?: string): VoiceAvailability;
-  /** Target languages the natural / own voices support. */
-  premiumVoiceLanguages(): string[];
+  /** Target languages the natural and own voices support. */
+  voiceLanguages(): { natural: string[]; cloned: string[] };
 }

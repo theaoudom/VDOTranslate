@@ -8,15 +8,21 @@ import { PLANS, RATES, type PlanId, type VoiceKind } from "@/domain/billing/pric
 import { fmt, LANG_OPTIONS, VOICE_INFO, VOICE_ORDER } from "./format";
 import { UploadDrop } from "./UploadDrop";
 
-/** Natural / own voices only speak some languages (not Khmer yet). */
-export function voicesFor(premiumLanguages: string[], lang: string): Record<VoiceKind, boolean> {
-  const ok = premiumLanguages.includes(lang);
-  return { standard: true, natural: ok, cloned: ok };
+export type VoiceLanguages = { natural: string[]; cloned: string[] };
+
+/** Natural and own voices only speak some languages (own voice: not Khmer yet). */
+export function voicesFor(langs: VoiceLanguages, lang: string): Record<VoiceKind, boolean> {
+  return { standard: true, natural: langs.natural.includes(lang), cloned: langs.cloned.includes(lang) };
 }
 
-export function premiumHint(premiumLanguages: string[], lang: string, label: string) {
-  if (premiumLanguages.includes(lang)) return null;
-  return premiumLanguages.length ? `Natural and own voices don’t speak ${label.split(" (")[0]} yet.` : "Natural and own-voice dubbing aren’t switched on for this site yet.";
+/** Explains why a voice card is greyed out for this language. */
+export function voiceHint(langs: VoiceLanguages, lang: string) {
+  const name = (LANG_OPTIONS.find((l) => l.code === lang)?.label ?? lang).split(" (")[0];
+  const v = voicesFor(langs, lang);
+  if (!v.natural && !v.cloned) return langs.natural.length || langs.cloned.length ? `Natural and own voices don’t speak ${name} yet.` : "Natural and own-voice dubbing aren’t switched on for this site yet.";
+  if (!v.cloned) return langs.cloned.length ? `Their own voice doesn’t speak ${name} yet.` : null;
+  if (!v.natural) return langs.natural.length ? `The natural voice doesn’t speak ${name} yet.` : null;
+  return null;
 }
 
 export function defaultVoice(planId: PlanId, available: Record<VoiceKind, boolean>): VoiceKind {
@@ -25,13 +31,13 @@ export function defaultVoice(planId: PlanId, available: Record<VoiceKind, boolea
   return "standard";
 }
 
-export function StartCard({ plan, premiumLanguages }: { plan: PlanId; premiumLanguages: string[] }) {
+export function StartCard({ plan, voiceLanguages }: { plan: PlanId; voiceLanguages: VoiceLanguages }) {
   const router = useRouter();
   const p = PLANS[plan];
   const [to, setTo] = useState("km");
-  const available = voicesFor(premiumLanguages, to);
+  const available = voicesFor(voiceLanguages, to);
   const [voice, setVoice] = useState<VoiceKind>(defaultVoice(plan, available));
-  useEffect(() => { if (!voicesFor(premiumLanguages, to)[voice]) setVoice("standard"); }, [to, voice, premiumLanguages]);
+  useEffect(() => { if (!voicesFor(voiceLanguages, to)[voice]) setVoice("standard"); }, [to, voice, voiceLanguages]);
   const perMin = estimateDub(60, { voice, keepBackground: false, burnSubtitles: true, blurSubtitles: false }, plan).total;
 
   return (
@@ -63,7 +69,7 @@ export function StartCard({ plan, premiumLanguages }: { plan: PlanId; premiumLan
             );
           })}
         </div>
-        {premiumHint(premiumLanguages, to, LANG_OPTIONS.find((l) => l.code === to)?.label ?? to) && <span className="hint">{premiumHint(premiumLanguages, to, LANG_OPTIONS.find((l) => l.code === to)?.label ?? to)}</span>}
+        {voiceHint(voiceLanguages, to) && <span className="hint">{voiceHint(voiceLanguages, to)}</span>}
         <span className="faint t-xs">About {fmt(perMin)} cr per minute of video. You’ll see the exact price before it starts.</span>
       </div>
     </div>

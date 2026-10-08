@@ -9,14 +9,14 @@ import { PLANS, RATES, type PlanId, type VoiceKind } from "@/domain/billing/pric
 import { useToast } from "../Toast";
 import { CostTable, MeterAfter } from "./bits";
 import { fmt, LANG_OPTIONS, mb, mmss, VOICE_INFO, VOICE_ORDER } from "./format";
-import { defaultVoice, premiumHint, voicesFor } from "./StartCard";
+import { defaultVoice, voiceHint, voicesFor, type VoiceLanguages } from "./StartCard";
 
 export interface TranslateFormProps {
   upload: { uploadId: string; name: string; size: number; durationSec: number };
   plan: PlanId;
   credits: number;
   ready: boolean;
-  available: { premiumLanguages: string[]; background: boolean };
+  available: { voiceLanguages: VoiceLanguages; background: boolean };
   initial: { to?: string; voice?: VoiceKind };
 }
 
@@ -25,12 +25,12 @@ export function TranslateForm({ upload, plan, credits, ready, available, initial
   const toast = useToast();
   const p = PLANS[plan];
   const [to, setTo] = useState(LANG_OPTIONS.some((l) => l.code === initial.to) ? initial.to! : "km");
-  const voices = voicesFor(available.premiumLanguages, to);
+  const voices = voicesFor(available.voiceLanguages, to);
   const voiceOk = (v?: VoiceKind) => v && voices[v] && (v !== "cloned" || p.clone);
   const [from, setFrom] = useState("auto");
   const [voice, setVoice] = useState<VoiceKind>(voiceOk(initial.voice) ? initial.voice! : defaultVoice(plan, voices));
   // switching to a language these voices can't speak falls back to the standard voice
-  useEffect(() => { if (!voicesFor(available.premiumLanguages, to)[voice]) setVoice("standard"); }, [to, voice, available.premiumLanguages]);
+  useEffect(() => { if (!voicesFor(available.voiceLanguages, to)[voice]) setVoice("standard"); }, [to, voice, available.voiceLanguages]);
   const [bg, setBg] = useState(available.background);
   const [subs, setSubs] = useState(true);
   const [blur, setBlur] = useState(false);
@@ -122,7 +122,7 @@ export function TranslateForm({ upload, plan, credits, ready, available, initial
                   })}
                 </div>
                 {!p.clone && voices.cloned && <span className="hint">Their own voice comes with Creator and Studio. <a href="#" onClick={(ev) => { ev.preventDefault(); billingSoon(); }}>Compare plans</a></span>}
-                {premiumHint(available.premiumLanguages, to, LANG_OPTIONS.find((l) => l.code === to)?.label ?? to) && <span className="hint">{premiumHint(available.premiumLanguages, to, LANG_OPTIONS.find((l) => l.code === to)?.label ?? to)}</span>}
+                {voiceHint(available.voiceLanguages, to) && <span className="hint">{voiceHint(available.voiceLanguages, to)}</span>}
               </div>
               <details className="more">
                 <summary><SlidersHorizontal />More options<span className="faint t-xs" style={{ fontWeight: 400 }}>spoken language, background, subtitles</span><ChevronDown /></summary>

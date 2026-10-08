@@ -6,6 +6,7 @@ import ffmpegStatic from "ffmpeg-static";
 import type { IAIRepository, TranscriptionResult, TranscriptionSegment, SynthesizeOptions, VoiceAvailability } from "@/domain/repositories/IAIRepository";
 import { createClient } from "@deepgram/sdk";
 import axios from "axios";
+import { AZURE_LOCALES, azureConfigured, synthesizeWithAzure } from "./AzureSpeech";
 
 ffmpeg.setFfmpegPath(ffmpegStatic as unknown as string);
 
@@ -79,6 +80,8 @@ interface SpeakerVoiceProfile {
   openaiVoice: string;
   elevenLabsVoiceId: string;
   googlePitch: number;
+  /** this speaker's number among speakers of the same gender */
+  genderIndex: number;
   isCloned: boolean;
 }
 
@@ -374,14 +377,22 @@ Return strict JSON exactly matching this format: { "results": [ { "id": number, 
     }
   }
 
+  /**
+   * standard → OpenAI / Google voices (always)
+   * natural  → Azure neural voices (incl. Khmer), needs AZURE_SPEECH_KEY + AZURE_SPEECH_REGION
+   * cloned   → ElevenLabs voice cloning (no Khmer), needs ELEVENLABS_API_KEY
+   */
   voiceAvailability(language?: string): VoiceAvailability {
-    const eleven = !!process.env.ELEVENLABS_API_KEY && (!language || ELEVENLABS_LANGUAGES.has(language));
-    return { standard: true, natural: eleven, cloned: eleven };
+    const langs = this.voiceLanguages();
+    const has = (list: string[]) => list.length > 0 && (!language || list.includes(language));
+    return { standard: true, natural: has(langs.natural), cloned: has(langs.cloned) };
   }
 
-  /** Languages the natural/own voices can speak (empty when no ElevenLabs key). */
-  premiumVoiceLanguages(): string[] {
-    return process.env.ELEVENLABS_API_KEY ? Array.from(ELEVENLABS_LANGUAGES) : [];
+  voiceLanguages() {
+    return {
+      natural: azureConfigured() ? Object.keys(AZURE_LOCALES) : [],
+      cloned: process.env.ELEVENLABS_API_KEY ? Array.from(ELEVENLABS_LANGUAGES) : [],
+    };
   }
 
   /**
@@ -391,8 +402,8 @@ Return strict JSON exactly matching this format: { "results": [ { "id": number, 
    */
   async synthesizeSegments(segments: TranscriptionSegment[], language: string, outDir: string, options: SynthesizeOptions): Promise<string[]> {
     const voice = options.voice;
-    const useEleven = voice !== "standard";
-    if (useEleven && !this.voiceAvailability(language)[voice]) {
+    const useEleven = voice === "cloned";
+    if (voice !== "standard" && !this.voiceAvailability(language)[voice]) {
       throw new Error(`The ${voice} voice isn't available for "${language}".`);
     }
     const only = options.onlyIndex;
@@ -415,7 +426,8 @@ Return strict JSON exactly matching this format: { "results": [ { "id": number, 
         const profile = voiceProfiles.get(seg.speaker)!;
         const file = path.join(outDir, `seg_${i}.mp3`);
         try {
-          if (useEleven) await this.synthesizeWithElevenLabs(seg, profile, file);
+          if (voice === "natural") await synthesizeWithAzure(seg.text, language, profile.gender, profile.genderIndex, file);
+          else if (useEleven) await this.synthesizeWithElevenLabs(seg, profile, file);
           else await this.synthesizeWithOpenAI(seg, language, profile, file);
           files.push(file);
         } catch (e) {
@@ -471,6 +483,7 @@ Return strict JSON exactly matching this format: { "results": [ { "id": number, 
         googlePitch: gender === "female"
           ? GOOGLE_PITCH_FEMALE[idx % GOOGLE_PITCH_FEMALE.length]
           : GOOGLE_PITCH_MALE[idx % GOOGLE_PITCH_MALE.length],
+        genderIndex: idx,
         isCloned: false,
       };
 

@@ -10,7 +10,7 @@ export const RATES = {
   translate: 1,
   render: 1,
   separate: 1,
-  voice: { cloned: 30, natural: 25, standard: 4 } as Record<VoiceKind, number>,
+  voice: { cloned: 30, natural: 5, standard: 4 } as Record<VoiceKind, number>,
   splitCut: 0.2,
   splitEncode: 1,
 };
