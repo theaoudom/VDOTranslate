@@ -73,6 +73,15 @@ export function TemplateEditor({ initialTemplates, sources: initialSources, init
   const [busy, setBusy] = useState(false);
 
   const viewerRef = useRef<HTMLDivElement>(null);
+  // Text size in px from the preview width (same formula as the export: w × 0.07 % of the frame width).
+  const [viewerWidth, setViewerWidth] = useState(0);
+  useEffect(() => {
+    const el = viewerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setViewerWidth(el.offsetWidth));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [t.ratio]);
   const mediaRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const layerRefs = useRef(new Map<string, HTMLDivElement>());
@@ -374,9 +383,9 @@ export function TemplateEditor({ initialTemplates, sources: initialSources, init
               <div key={x.id} ref={(el) => { if (el) layerRefs.current.set(x.id, el); else layerRefs.current.delete(x.id); }}
                 className={"layer" + (x.type === "text" ? "" : " box") + (x.id === sel ? " sel" : "") + (shown(x) ? "" : " dim")}
                 data-layer={x.id}
-                style={{ left: x.x + "%", top: x.y + "%", ...(x.type === "text" ? { fontSize: (x.w * 0.07).toFixed(2) + "cqw" } : { width: x.w + "%", aspectRatio: String(x.ar || 1) }) }}>
+                style={{ left: x.x + "%", top: x.y + "%", ...(x.type === "text" ? { fontSize: ((x.w * 0.07) / 100) * (viewerWidth || 300) + "px" } : { width: x.w + "%", aspectRatio: String(x.ar || 1) }) }}>
                 {x.type === "text" ? (
-                  <div className={"txt " + (x.style ?? "dark")} style={{ opacity: x.op / 100 }}>{x.text || "Your text"}</div>
+                  <div className={"txt " + (x.style ?? "dark")} style={{ opacity: x.op / 100, fontSize: "inherit" }}>{x.text || "Your text"}</div>
                 ) : x.asset ? (
                   x.type === "video"
                     ? <video src={`/api/templates/assets/${x.asset}`} muted autoPlay loop playsInline style={{ opacity: x.op / 100 }} />
@@ -426,23 +435,23 @@ export function TemplateEditor({ initialTemplates, sources: initialSources, init
             </div>
           </div>
 
-          <p className="faint t-xs hstack">
+          <div className="faint t-xs hstack">
             {saveState === "saving" ? <><LoaderCircle style={{ width: 14, height: 14 }} />Saving…</>
               : saveState === "error" ? <><OctagonAlert style={{ width: 14, height: 14, color: "var(--rec)" }} />Not saved. Check your connection.</>
               : <><CircleCheck style={{ width: 14, height: 14, color: "var(--ok)" }} />Changes save automatically.</>}
             {" "}Previewing on {source?.name ?? "a sample"} ·{" "}
             <span className="menu-anchor">
               <button className="linkbtn" onClick={() => setMenu(menu === "src" ? null : "src")}>Use another video</button>
-              <span className="menu" role="menu" hidden={menu !== "src"} style={{ left: 0, right: "auto", minWidth: 260 }}>
+              <div className="menu" role="menu" hidden={menu !== "src"} style={{ left: 0, right: "auto", minWidth: 260 }}>
                 {sources.map((s) => (
                   <button key={s.kind + s.id} role="menuitem" onClick={() => { setMenu(null); setSource(s); setTime(0); setPlaying(false); }}><Film />{s.name} <span className="k">{mmss(s.durationSec)}</span></button>
                 ))}
                 {sources.length > 0 && <hr />}
                 <button role="menuitem" onClick={() => srcFileRef.current?.click()}><Upload />Upload a video…</button>
-              </span>
+              </div>
             </span>
             <input ref={srcFileRef} type="file" accept="video/*" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) useUploadedSource(f); }} />
-          </p>
+          </div>
         </div>
 
         <div className="stack">

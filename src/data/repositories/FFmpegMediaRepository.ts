@@ -147,6 +147,14 @@ export function subtitleFont(language?: string): string {
   return fonts[base] ?? "Segoe UI";
 }
 
+/**
+ * libass sizes text by the font's full height (OS/2 winAscent + winDescent), while the editor
+ * (CSS) sizes it by the em. Multiply by this ratio so exports match the preview.
+ * Measured from the font files; Khmer fonts are much taller to fit stacked letters.
+ */
+const FONT_HEIGHT: Record<string, number> = { "Noto Sans Khmer": 1.862, "Segoe UI": 1.33 };
+const DEFAULT_FONT_HEIGHT = 1.33;
+
 /** Font for a template text, picked from the characters it uses. */
 function fontForText(text: string): string {
   if (/[ក-៿]/.test(text)) return "Noto Sans Khmer";
@@ -198,8 +206,11 @@ export function buildAss(o: { cues: SubtitleCue[]; width: number; height: number
     const op = L.op / 100;
     const x = Math.round((L.x / 100) * o.width + pad), y = Math.round((L.y / 100) * o.height + pad);
     const textAlpha = hex2((1 - op) * 255), boxAlpha = hex2((1 - op * st.boxOpacity) * 255);
-    const tags = `{\\an7\\pos(${x},${y})\\fn${fontForText(L.text ?? "")}\\fs${fs}\\bord${pad}\\1c&H${bgr(st.text)}&\\3c&H${bgr(st.box)}&\\1a&H${textAlpha}&\\3a&H${boxAlpha}&}`;
-    lines.push(`Dialogue: 1,${assTime(a)},${assTime(b)},Layer,,0,0,0,,${tags}${clean(L.text ?? "")}`);
+    const font = fontForText(L.text ?? "");
+    const assSize = Math.round(fs * (FONT_HEIGHT[font] ?? DEFAULT_FONT_HEIGHT));
+    const tags = `{\\an7\\pos(${x},${y})\\fn${font}\\fs${assSize}\\bord${pad}\\1c&H${bgr(st.text)}&\\3c&H${bgr(st.box)}&\\1a&H${textAlpha}&\\3a&H${boxAlpha}&}`;
+    // \h = hard space: the editor pads twice as much left/right as top/bottom; the ASS box pads evenly.
+    lines.push(`Dialogue: 1,${assTime(a)},${assTime(b)},Layer,,0,0,0,,${tags}\\h${clean(L.text ?? "")}\\h`);
   }
   for (const c of o.cues) {
     if (!c.text.trim()) continue;
