@@ -13,19 +13,36 @@ ffmpeg.setFfmpegPath(ffmpegStatic as unknown as string);
 const OPENAI_MALE_VOICES = ["onyx", "echo", "fable"] as const;
 const OPENAI_FEMALE_VOICES = ["nova", "shimmer", "alloy"] as const;
 
-// 11Labs premade multilingual voices
-const ELEVENLABS_MALE_VOICES = [
-  "pNInz6obpgDQGcFmaJcg", // Adam
-  "ErXwobaYiN019PkySvjV", // Antoni
-  "TxGEqnHWrfWFTfGW9XjX", // Josh
-  "VR6AewLTigWG4xSOukaG", // Arnold
-];
-const ELEVENLABS_FEMALE_VOICES = [
-  "EXAVITQu4vr4xnSDxMaL", // Bella
-  "21m00Tcm4TlvDq8ikWAM", // Rachel
-  "AZnzlk1XvdvUeBnXmlld", // Domi
-  "MF3mGyEYCl7XYWbV9V6O", // Elli
-];
+// ElevenLabs voices come from the account (GET /v1/voices): the old fixed premade
+// ids were retired. Fallbacks are only used if the list can't be read.
+const ELEVENLABS_FALLBACK = { male: ["JBFqnCBsd6RMkjVDRZzb"], female: ["EXAVITQu4vr4xnSDxMaL"] };
+const ELEVENLABS_MODEL = "eleven_v4";
+
+/**
+ * Target languages eleven_v4 speaks (from ElevenLabs' model docs). Khmer is NOT supported:
+ * tested 2026-10-08, it comes out as gibberish, so Khmer stays on the standard voice.
+ */
+export const ELEVENLABS_LANGUAGES = new Set([
+  "en", "zh", "zh-TW", "vi", "ja", "ko", "fr", "de", "es", "pt", "ar", "hi", "ru", "id", "ms",
+  "tr", "nl", "pl", "it", "uk", "fa", "lo", "my", "sw",
+]);
+
+let elevenVoiceCache: { at: number; male: string[]; female: string[] } | null = null;
+async function elevenVoices(): Promise<{ male: string[]; female: string[] }> {
+  if (elevenVoiceCache && Date.now() - elevenVoiceCache.at < 3600_000) return elevenVoiceCache;
+  try {
+    const res = await fetch("https://api.elevenlabs.io/v1/voices", { headers: { "xi-api-key": process.env.ELEVENLABS_API_KEY ?? "" } });
+    if (!res.ok) throw new Error(`voices ${res.status}`);
+    const { voices } = (await res.json()) as { voices: { voice_id: string; name: string; category?: string; labels?: { gender?: string } }[] };
+    const pick = (g: string) => voices.filter((v) => v.category === "premade" && v.labels?.gender === g).sort((a, b) => a.name.localeCompare(b.name)).map((v) => v.voice_id);
+    const male = pick("male"), female = pick("female");
+    elevenVoiceCache = { at: Date.now(), male: male.length ? male : ELEVENLABS_FALLBACK.male, female: female.length ? female : ELEVENLABS_FALLBACK.female };
+  } catch (e) {
+    console.error("[TTS] Couldn't list ElevenLabs voices, using fallbacks:", e instanceof Error ? e.message : e);
+    return ELEVENLABS_FALLBACK;
+  }
+  return elevenVoiceCache;
+}
 
 // Google TTS only has one voice per language, so we pitch-shift it per speaker
 // (rate < 1.0 = deeper, > 1.0 = brighter). Pace is compensated so speed stays 1.0x.
@@ -357,9 +374,14 @@ Return strict JSON exactly matching this format: { "results": [ { "id": number, 
     }
   }
 
-  voiceAvailability(): VoiceAvailability {
-    const eleven = !!process.env.ELEVENLABS_API_KEY;
+  voiceAvailability(language?: string): VoiceAvailability {
+    const eleven = !!process.env.ELEVENLABS_API_KEY && (!language || ELEVENLABS_LANGUAGES.has(language));
     return { standard: true, natural: eleven, cloned: eleven };
+  }
+
+  /** Languages the natural/own voices can speak (empty when no ElevenLabs key). */
+  premiumVoiceLanguages(): string[] {
+    return process.env.ELEVENLABS_API_KEY ? Array.from(ELEVENLABS_LANGUAGES) : [];
   }
 
   /**
@@ -370,8 +392,8 @@ Return strict JSON exactly matching this format: { "results": [ { "id": number, 
   async synthesizeSegments(segments: TranscriptionSegment[], language: string, outDir: string, options: SynthesizeOptions): Promise<string[]> {
     const voice = options.voice;
     const useEleven = voice !== "standard";
-    if (useEleven && !process.env.ELEVENLABS_API_KEY) {
-      throw new Error("Natural and own-voice dubbing need an ElevenLabs key (ELEVENLABS_API_KEY).");
+    if (useEleven && !this.voiceAvailability(language)[voice]) {
+      throw new Error(`The ${voice} voice isn't available for "${language}".`);
     }
     const only = options.onlyIndex;
     console.log(`[TTS] Synthesizing ${only == null ? segments.length + " segments" : "segment " + only} (${voice})...`);
@@ -430,6 +452,7 @@ Return strict JSON exactly matching this format: { "results": [ { "id": number, 
 
     console.log(`[TTS] Detected ${speakerSegments.size} distinct speaker(s): ${Array.from(speakerSegments.keys()).join(", ")}`);
 
+    const eleven = opts.hasElevenLabs ? await elevenVoices() : ELEVENLABS_FALLBACK;
     let maleCount = 0;
     let femaleCount = 0;
 
@@ -443,8 +466,8 @@ Return strict JSON exactly matching this format: { "results": [ { "id": number, 
           ? OPENAI_FEMALE_VOICES[idx % OPENAI_FEMALE_VOICES.length]
           : OPENAI_MALE_VOICES[idx % OPENAI_MALE_VOICES.length],
         elevenLabsVoiceId: gender === "female"
-          ? ELEVENLABS_FEMALE_VOICES[idx % ELEVENLABS_FEMALE_VOICES.length]
-          : ELEVENLABS_MALE_VOICES[idx % ELEVENLABS_MALE_VOICES.length],
+          ? eleven.female[idx % eleven.female.length]
+          : eleven.male[idx % eleven.male.length],
         googlePitch: gender === "female"
           ? GOOGLE_PITCH_FEMALE[idx % GOOGLE_PITCH_FEMALE.length]
           : GOOGLE_PITCH_MALE[idx % GOOGLE_PITCH_MALE.length],
@@ -553,7 +576,7 @@ Return strict JSON exactly matching this format: { "results": [ { "id": number, 
       `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`,
       {
         text: seg.text,
-        model_id: "eleven_multilingual_v2", // Multilingual model is perfect for non-English
+        model_id: ELEVENLABS_MODEL,
       },
       {
         headers: {

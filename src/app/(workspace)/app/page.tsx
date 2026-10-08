@@ -38,7 +38,7 @@ export default async function HomePage() {
           <div><b>You have {fmt(account.credits)} credits left</b>, enough for about {Math.max(0, Math.floor(account.credits / stdPerMin))} min with standard voices. <BillingSoonLink>Top up or upgrade</BillingSoonLink></div>
         </div>
       )}
-      <StartCard plan={account.plan} available={c.ai.voiceAvailability()} />
+      <StartCard plan={account.plan} premiumLanguages={c.ai.premiumVoiceLanguages()} />
       <div style={{ height: "var(--sp-6)" }} />
       <div className="grid g-2-1">
         <div className="panel">

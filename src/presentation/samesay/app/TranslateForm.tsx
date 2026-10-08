@@ -2,21 +2,21 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowUpCircle, ChevronDown, Coins, Mic, OctagonAlert, ReceiptText, RefreshCw, Scissors, SlidersHorizontal, Sparkles } from "lucide-react";
 import { estimateDub, maxAffordableSec, type DubOptions } from "@/domain/billing/estimate";
 import { PLANS, RATES, type PlanId, type VoiceKind } from "@/domain/billing/pricing";
 import { useToast } from "../Toast";
 import { CostTable, MeterAfter } from "./bits";
 import { fmt, LANG_OPTIONS, mb, mmss, VOICE_INFO, VOICE_ORDER } from "./format";
-import { defaultVoice } from "./StartCard";
+import { defaultVoice, premiumHint, voicesFor } from "./StartCard";
 
 export interface TranslateFormProps {
   upload: { uploadId: string; name: string; size: number; durationSec: number };
   plan: PlanId;
   credits: number;
   ready: boolean;
-  available: { voices: Record<VoiceKind, boolean>; background: boolean };
+  available: { premiumLanguages: string[]; background: boolean };
   initial: { to?: string; voice?: VoiceKind };
 }
 
@@ -24,10 +24,13 @@ export function TranslateForm({ upload, plan, credits, ready, available, initial
   const router = useRouter();
   const toast = useToast();
   const p = PLANS[plan];
-  const voiceOk = (v?: VoiceKind) => v && available.voices[v] && (v !== "cloned" || p.clone);
   const [to, setTo] = useState(LANG_OPTIONS.some((l) => l.code === initial.to) ? initial.to! : "km");
+  const voices = voicesFor(available.premiumLanguages, to);
+  const voiceOk = (v?: VoiceKind) => v && voices[v] && (v !== "cloned" || p.clone);
   const [from, setFrom] = useState("auto");
-  const [voice, setVoice] = useState<VoiceKind>(voiceOk(initial.voice) ? initial.voice! : defaultVoice(plan, available.voices));
+  const [voice, setVoice] = useState<VoiceKind>(voiceOk(initial.voice) ? initial.voice! : defaultVoice(plan, voices));
+  // switching to a language these voices can't speak falls back to the standard voice
+  useEffect(() => { if (!voicesFor(available.premiumLanguages, to)[voice]) setVoice("standard"); }, [to, voice, available.premiumLanguages]);
   const [bg, setBg] = useState(available.background);
   const [subs, setSubs] = useState(true);
   const [blur, setBlur] = useState(false);
@@ -105,7 +108,7 @@ export function TranslateForm({ upload, plan, credits, ready, available, initial
                 <div className="opts">
                   {VOICE_ORDER.map((k) => {
                     const locked = k === "cloned" && !p.clone;
-                    const off = !available.voices[k];
+                    const off = !voices[k];
                     return (
                       <button key={k} className="opt" aria-pressed={voice === k} disabled={locked || off} onClick={() => setVoice(k)}>
                         <span className="t">{VOICE_INFO[k].name}
@@ -118,8 +121,8 @@ export function TranslateForm({ upload, plan, credits, ready, available, initial
                     );
                   })}
                 </div>
-                {!p.clone && available.voices.cloned && <span className="hint">Their own voice comes with Creator and Studio. <a href="#" onClick={(ev) => { ev.preventDefault(); billingSoon(); }}>Compare plans</a></span>}
-                {!available.voices.natural && <span className="hint">Natural and own-voice dubbing aren’t switched on for this site yet.</span>}
+                {!p.clone && voices.cloned && <span className="hint">Their own voice comes with Creator and Studio. <a href="#" onClick={(ev) => { ev.preventDefault(); billingSoon(); }}>Compare plans</a></span>}
+                {premiumHint(available.premiumLanguages, to, LANG_OPTIONS.find((l) => l.code === to)?.label ?? to) && <span className="hint">{premiumHint(available.premiumLanguages, to, LANG_OPTIONS.find((l) => l.code === to)?.label ?? to)}</span>}
               </div>
               <details className="more">
                 <summary><SlidersHorizontal />More options<span className="faint t-xs" style={{ fontWeight: 400 }}>spoken language, background, subtitles</span><ChevronDown /></summary>

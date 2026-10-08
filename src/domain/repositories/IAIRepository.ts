@@ -30,5 +30,8 @@ export interface IAIRepository {
   translate(segments: TranscriptionSegment[], targetLanguage: string): Promise<TranscriptionSegment[]>;
   synthesizeSegments(segments: TranscriptionSegment[], language: string, outDir: string, options: SynthesizeOptions): Promise<string[]>;
   stitch(segments: TranscriptionSegment[], files: string[], outputPath: string): Promise<void>;
-  voiceAvailability(): VoiceAvailability;
+  /** Which voices can speak this target language (all voices when no language given). */
+  voiceAvailability(language?: string): VoiceAvailability;
+  /** Target languages the natural / own voices support. */
+  premiumVoiceLanguages(): string[];
 }

@@ -44,7 +44,7 @@ export class StartTranslationUseCase {
 
     if (est.overLength) return { ok: false, code: "too_long", message: `The ${plan.name} plan handles videos up to ${plan.maxMin} min.` };
     if (input.voice === "cloned" && !plan.clone) return { ok: false, code: "voice_locked", message: "Their own voice comes with Creator and Studio." };
-    if (!this.ai.voiceAvailability()[input.voice]) return { ok: false, code: "voice_unavailable", message: "This voice isn’t available yet. Choose the standard AI voice." };
+    if (!this.ai.voiceAvailability(input.targetLanguage)[input.voice]) return { ok: false, code: "voice_unavailable", message: "This voice isn’t available for that language yet. Choose the standard AI voice." };
     if (input.keepBackground && !this.separator.available) return { ok: false, code: "background_unavailable", message: "Keeping background sound isn’t available yet. Turn it off under More options." };
 
     const route = `${(input.sourceLanguage ?? "auto").toUpperCase()} → ${input.targetLanguage.toUpperCase()}`;

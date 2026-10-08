@@ -1,12 +1,23 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FolderOpen, Upload } from "lucide-react";
 import { estimateDub } from "@/domain/billing/estimate";
 import { PLANS, RATES, type PlanId, type VoiceKind } from "@/domain/billing/pricing";
 import { fmt, LANG_OPTIONS, VOICE_INFO, VOICE_ORDER } from "./format";
 import { UploadDrop } from "./UploadDrop";
+
+/** Natural / own voices only speak some languages (not Khmer yet). */
+export function voicesFor(premiumLanguages: string[], lang: string): Record<VoiceKind, boolean> {
+  const ok = premiumLanguages.includes(lang);
+  return { standard: true, natural: ok, cloned: ok };
+}
+
+export function premiumHint(premiumLanguages: string[], lang: string, label: string) {
+  if (premiumLanguages.includes(lang)) return null;
+  return premiumLanguages.length ? `Natural and own voices don’t speak ${label.split(" (")[0]} yet.` : "Natural and own-voice dubbing aren’t switched on for this site yet.";
+}
 
 export function defaultVoice(planId: PlanId, available: Record<VoiceKind, boolean>): VoiceKind {
   if (PLANS[planId].clone && available.cloned) return "cloned";
@@ -14,11 +25,13 @@ export function defaultVoice(planId: PlanId, available: Record<VoiceKind, boolea
   return "standard";
 }
 
-export function StartCard({ plan, available }: { plan: PlanId; available: Record<VoiceKind, boolean> }) {
+export function StartCard({ plan, premiumLanguages }: { plan: PlanId; premiumLanguages: string[] }) {
   const router = useRouter();
   const p = PLANS[plan];
   const [to, setTo] = useState("km");
+  const available = voicesFor(premiumLanguages, to);
   const [voice, setVoice] = useState<VoiceKind>(defaultVoice(plan, available));
+  useEffect(() => { if (!voicesFor(premiumLanguages, to)[voice]) setVoice("standard"); }, [to, voice, premiumLanguages]);
   const perMin = estimateDub(60, { voice, keepBackground: false, burnSubtitles: true, blurSubtitles: false }, plan).total;
 
   return (
@@ -42,14 +55,15 @@ export function StartCard({ plan, available }: { plan: PlanId; available: Record
             return (
               <button key={k} className="opt" aria-pressed={voice === k} disabled={locked || off} onClick={() => setVoice(k)}>
                 <span className="t">{VOICE_INFO[k].name}
-                  {k === "cloned" && (locked ? <span className="badge accent">Creator+</span> : off ? <span className="badge">Not available yet</span> : <span className="badge ok">Best match</span>)}
-                  {k === "natural" && off && <span className="badge">Not available yet</span>}
+                  {k === "cloned" && !off && (locked ? <span className="badge accent">Creator+</span> : <span className="badge ok">Best match</span>)}
+                  {off && <span className="badge">Not available yet</span>}
                 </span>
                 <span className="p">{RATES.voice[k]} cr / min of voice</span>
               </button>
             );
           })}
         </div>
+        {premiumHint(premiumLanguages, to, LANG_OPTIONS.find((l) => l.code === to)?.label ?? to) && <span className="hint">{premiumHint(premiumLanguages, to, LANG_OPTIONS.find((l) => l.code === to)?.label ?? to)}</span>}
         <span className="faint t-xs">About {fmt(perMin)} cr per minute of video. You’ll see the exact price before it starts.</span>
       </div>
     </div>

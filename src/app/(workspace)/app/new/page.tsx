@@ -36,7 +36,7 @@ export default async function NewTranslationPage({ searchParams }: { searchParam
       plan={account.plan}
       credits={account.credits}
       ready={account.ready}
-      available={{ voices: c.ai.voiceAvailability(), background: c.separator.available }}
+      available={{ premiumLanguages: c.ai.premiumVoiceLanguages(), background: c.separator.available }}
       initial={{ to: searchParams.to, voice: searchParams.voice as VoiceKind | undefined }}
     />
   );
