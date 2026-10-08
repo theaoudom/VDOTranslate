@@ -11,8 +11,7 @@ import { code, fmt, mmss, relativeDay } from "./format";
 const TABS = [["all", "All"], ["dub", "Translations"], ["split", "Splits"], ["edit", "Edits"]] as const;
 type Tab = (typeof TABS)[number][0];
 
-// Splits and edits arrive with the Templates and Auto-split tools; every job here is a translation for now.
-const kindOf = (_j: PublicJob): Tab => "dub";
+const kindOf = (j: PublicJob): Tab => j.kind;
 
 export function VideosTable({ jobs }: { jobs: PublicJob[] }) {
   const router = useRouter();
@@ -41,7 +40,7 @@ export function VideosTable({ jobs }: { jobs: PublicJob[] }) {
                 {list.map((j) => (
                   <tr key={j.id} className="row click" style={{ display: "table-row" }} onClick={() => router.push(`/app/videos/${j.id}`)}>
                     <td><div className="hstack" style={{ flexWrap: "nowrap" }}><div className="thumb"><span className="dur">{mmss(j.durationSec)}</span></div><Link href={`/app/videos/${j.id}`} style={{ fontWeight: 600, color: "var(--text)" }}>{j.name}</Link></div></td>
-                    <td>Translation <span className="faint num t-xs">{code(j.sourceLanguage)}→{code(j.targetLanguage)}</span></td>
+                    <td>{j.kind === "edit" ? <>Edit <span className="faint t-xs">{j.template?.name}</span></> : <>Translation <span className="faint num t-xs">{code(j.sourceLanguage)}→{code(j.targetLanguage)}</span></>}</td>
                     <td className="num">{mmss(j.durationSec)}</td>
                     <td className="r num">{isRunning(j) ? "held " + fmt(j.held) : fmt(j.used)}</td>
                     <td><StatusBadge job={j} /></td>

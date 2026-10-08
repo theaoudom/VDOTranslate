@@ -80,3 +80,6 @@ export function maxAffordableSec(durationSec: number, opts: DubOptions, planId: 
 
 /** Fixed price for re-voicing one corrected line. */
 export const REVOICE_LINE_CREDITS = 1;
+
+/** Fixed price of exporting a video with a template: render minutes, at least 1 credit. */
+export const exportCost = (durationSec: number) => Math.max(1, Math.ceil((durationSec / 60) * RATES.render));

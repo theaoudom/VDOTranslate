@@ -18,9 +18,10 @@ export interface TranslateFormProps {
   ready: boolean;
   available: { voiceLanguages: VoiceLanguages; background: boolean };
   initial: { to?: string; voice?: VoiceKind };
+  templates: { id: string; name: string; ratio: string }[];
 }
 
-export function TranslateForm({ upload, plan, credits, ready, available, initial }: TranslateFormProps) {
+export function TranslateForm({ upload, plan, credits, ready, available, initial, templates }: TranslateFormProps) {
   const router = useRouter();
   const toast = useToast();
   const p = PLANS[plan];
@@ -35,6 +36,7 @@ export function TranslateForm({ upload, plan, credits, ready, available, initial
   const [subs, setSubs] = useState(true);
   const [blur, setBlur] = useState(false);
   const [trim, setTrim] = useState<number | null>(null);
+  const [templateId, setTemplateId] = useState("");
   const [starting, setStarting] = useState(false);
 
   const opts: DubOptions = { voice, keepBackground: bg, burnSubtitles: subs, blurSubtitles: blur };
@@ -48,7 +50,7 @@ export function TranslateForm({ upload, plan, credits, ready, available, initial
     const res = await fetch("/api/jobs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ uploadId: upload.uploadId, targetLanguage: to, sourceLanguage: from, voice, keepBackground: bg, burnSubtitles: subs, blurSubtitles: blur, trimSec: trim }),
+      body: JSON.stringify({ uploadId: upload.uploadId, targetLanguage: to, sourceLanguage: from, voice, keepBackground: bg, burnSubtitles: subs, blurSubtitles: blur, trimSec: trim, templateId: templateId || undefined }),
     });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) { setStarting(false); toast(body.error ?? "Couldn’t start. Please try again.", true); return; }
@@ -123,6 +125,14 @@ export function TranslateForm({ upload, plan, credits, ready, available, initial
                 </div>
                 {!p.clone && voices.cloned && <span className="hint">Their own voice comes with Creator and Studio. <a href="#" onClick={(ev) => { ev.preventDefault(); billingSoon(); }}>Compare plans</a></span>}
                 {voiceHint(available.voiceLanguages, to) && <span className="hint">{voiceHint(available.voiceLanguages, to)}</span>}
+              </div>
+              <div className="field">
+                <label className="label" htmlFor="d-tpl">Brand template</label>
+                <select className="select" id="d-tpl" value={templateId} onChange={(ev) => setTemplateId(ev.target.value)}>
+                  <option value="">None</option>
+                  {templates.map((t) => <option key={t.id} value={t.id}>{t.name} · {t.ratio}</option>)}
+                </select>
+                <span className="hint">Adds your logo, text and clips to the translated video. <Link href="/app/templates">Edit templates</Link></span>
               </div>
               <details className="more">
                 <summary><SlidersHorizontal />More options<span className="faint t-xs" style={{ fontWeight: 400 }}>spoken language, background, subtitles</span><ChevronDown /></summary>

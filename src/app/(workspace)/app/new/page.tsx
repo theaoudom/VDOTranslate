@@ -2,6 +2,8 @@ import fs from "fs";
 import path from "path";
 import type { Metadata } from "next";
 import { PLANS, type VoiceKind } from "@/domain/billing/pricing";
+import { SupabaseTemplateRepository } from "@/data/repositories/SupabaseRepositories";
+import type { Template } from "@/domain/entities/Template";
 import { loadAccount } from "@/lib/account";
 import { buildContainer, jobDir } from "@/lib/container";
 import { getCurrentUser } from "@/lib/supabase/server";
@@ -30,6 +32,8 @@ export default async function NewTranslationPage({ searchParams }: { searchParam
   if (!upload) return <NewUpload maxMin={PLANS[account.plan].maxMin} planName={PLANS[account.plan].name} />;
 
   const c = buildContainer();
+  const list: Template[] = account.ready ? await new SupabaseTemplateRepository().listForUser(user.id).catch(() => []) : [];
+  const templates = list.map((t) => ({ id: t.id, name: t.name, ratio: t.ratio }));
   return (
     <TranslateForm
       upload={upload}
@@ -38,6 +42,7 @@ export default async function NewTranslationPage({ searchParams }: { searchParam
       ready={account.ready}
       available={{ voiceLanguages: c.ai.voiceLanguages(), background: c.separator.available }}
       initial={{ to: searchParams.to, voice: searchParams.voice as VoiceKind | undefined }}
+      templates={templates}
     />
   );
 }

@@ -36,6 +36,7 @@ export function JobView({ initial }: { initial: PublicJob }) {
   const revoicing = job.status === "merging" && job.lines != null;
   if (job.status === "failed") return <FailedView job={job} />;
   if (isRunning(job) && !revoicing) return <ProcessingView job={job} />;
+  if (job.kind === "edit") return <EditResultView job={job} />;
   return <ResultView job={job} revoicing={revoicing} onRevoiceStarted={() => setJob({ ...job, status: "merging", progress: 90 })} />;
 }
 
@@ -43,7 +44,7 @@ function Head({ job, children }: { job: PublicJob; children?: React.ReactNode })
   return (
     <div className="page-head">
       <div>
-        <span className="eyebrow">Translation · {relativeDay(new Date(job.createdAt))}</span>
+        <span className="eyebrow">{job.kind === "edit" ? "Edit" : "Translation"} · {relativeDay(new Date(job.createdAt))}</span>
         <h1 className="t-h2" style={{ marginTop: 4 }}>{job.name}</h1>
         <p className="sub">{jobMeta(job)}</p>
       </div>
@@ -54,7 +55,9 @@ function Head({ job, children }: { job: PublicJob; children?: React.ReactNode })
 
 /* ── processing ── */
 function ProcessingView({ job }: { job: PublicJob }) {
-  const steps: [string, string][] = [
+  const steps: [string, string][] = job.kind === "edit" ? [
+    ["merging", `Placing ${job.template?.name ? "“" + job.template.name + "”" : "the template"}${job.template && job.template.ratio !== "16:9" ? ", cropping to " + job.template.ratio : ""} and rendering the video`],
+  ] : [
     ["extracting", "Extracting audio"],
     ...(job.keepBackground ? [["separating", "Separating voices from music and sounds"] as [string, string]] : []),
     ["transcribing", "Transcribing and finding speakers"],
@@ -85,11 +88,17 @@ function ProcessingView({ job }: { job: PublicJob }) {
         <div className="panel">
           <div className="panel-head"><h3>Credits</h3></div>
           <div className="panel-body stack">
-            <table className="cost"><tbody>
-              <tr><td>Held for this job</td><td>{fmt(job.held)}</td></tr>
-              <tr className="total"><td>Charged so far</td><td>0 cr</td></tr>
-            </tbody></table>
-            <div className="note accent"><Info /><div>You’ll pay only what the job uses. The rest returns to your balance when it finishes.</div></div>
+            {job.kind === "edit" ? (
+              <table className="cost"><tbody><tr className="total"><td>Fixed price</td><td>{fmt(job.held)} cr</td></tr></tbody></table>
+            ) : (
+              <>
+                <table className="cost"><tbody>
+                  <tr><td>Held for this job</td><td>{fmt(job.held)}</td></tr>
+                  <tr className="total"><td>Charged so far</td><td>0 cr</td></tr>
+                </tbody></table>
+                <div className="note accent"><Info /><div>You’ll pay only what the job uses. The rest returns to your balance when it finishes.</div></div>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -196,7 +205,7 @@ function ResultView({ job, revoicing, onRevoiceStarted }: { job: PublicJob; revo
     <section>
       <Head job={job}>
         <div className="hstack">
-          <Link className="btn" href="/app/templates"><LayoutTemplate />Add a template</Link>
+          <Link className="btn" href={`/app/templates?video=${job.id}`}><LayoutTemplate />Add a template</Link>
           <Link className="btn" href="/app/split"><Scissors />Split into parts</Link>
           {job.hasVideo && <div className="menu-anchor" ref={menuRef}>
             <button className="btn primary" onClick={() => setMenu((m) => !m)} aria-haspopup="menu" aria-expanded={menu}><Download />Download<ChevronDown /></button>
@@ -300,6 +309,42 @@ function ResultView({ job, revoicing, onRevoiceStarted }: { job: PublicJob; revo
                 );
               })}
             </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ── result of "Export this video" (template applied) ── */
+function EditResultView({ job }: { job: PublicJob }) {
+  const [shape, setShape] = useState("");
+  const base = `/api/jobs/${job.id}/files`;
+  return (
+    <section>
+      <Head job={job}>
+        <div className="hstack">
+          <Link className="btn" href={`/app/templates?video=${job.id}`}><LayoutTemplate />Edit template</Link>
+          <Link className="btn" href="/app/split"><Scissors />Split into parts</Link>
+          {job.hasVideo && <a className="btn primary" href={`${base}/video?download=1`}><Download />Download MP4</a>}
+        </div>
+      </Head>
+      <div className="grid g-2-1">
+        {job.hasVideo ? (
+          <div className={"viewer " + shape}>
+            <video src={`${base}/video?v=${new Date(job.updatedAt).getTime()}`} controls playsInline preload="metadata"
+              onLoadedMetadata={(e) => { const r = e.currentTarget.videoWidth / (e.currentTarget.videoHeight || 1); setShape(r < 0.8 ? "r916" : r < 1.25 ? "r11" : ""); }} />
+          </div>
+        ) : (
+          <div className="note"><Info /><div><b>The video files were deleted.</b> Files are kept for 30 days.</div></div>
+        )}
+        <div className="panel">
+          <div className="panel-head"><h3>Credits</h3></div>
+          <div className="panel-body">
+            <table className="cost"><tbody>
+              <tr><td>Render<span className="sub">{(job.durationSec / 60).toFixed(1)} min × 1 cr · {job.template?.ratio}</span></td><td>{fmt(job.used)}</td></tr>
+              <tr className="total"><td>Charged</td><td>{fmt(job.used)} cr</td></tr>
+            </tbody></table>
           </div>
         </div>
       </div>

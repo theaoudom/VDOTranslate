@@ -1,13 +1,10 @@
 import * as path from "path";
-import { RATES } from "@/domain/billing/pricing";
+import { exportCost } from "@/domain/billing/estimate";
 import type { JobTemplate, TranslationJob } from "@/domain/entities/TranslationJob";
 import type { ICreditRepository } from "@/domain/repositories/ICreditRepository";
 import type { IMediaRepository } from "@/domain/repositories/IMediaRepository";
 import type { ITranslationJobRepository } from "@/domain/repositories/ITranslationJobRepository";
 import { activeJobs } from "./activeJobs";
-
-/** Fixed price: render minutes, at least 1 credit. */
-export const exportCost = (durationSec: number) => Math.max(1, Math.ceil((durationSec / 60) * RATES.render));
 
 export interface ExportInput {
   userId: string;
