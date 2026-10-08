@@ -1,14 +1,20 @@
-import * as fs from "fs";
 import * as path from "path";
 import { actualDubCost, estimateDub } from "@/domain/billing/estimate";
-import type { SpeakerInfo, TranscriptLine, TranslationJob } from "@/domain/entities/TranslationJob";
+import type { JobFiles, SpeakerInfo, TranscriptLine, TranslationJob } from "@/domain/entities/TranslationJob";
 import type { IAIRepository, TranscriptionSegment } from "@/domain/repositories/IAIRepository";
 import type { IAudioSeparator } from "@/domain/repositories/IAudioSeparator";
 import type { ICreditRepository } from "@/domain/repositories/ICreditRepository";
-import type { IMediaRepository } from "@/domain/repositories/IMediaRepository";
+import type { IFileStore } from "@/domain/repositories/IFileStore";
+import type { IMediaRepository, RenderTemplate } from "@/domain/repositories/IMediaRepository";
 import type { ITranslationJobRepository } from "@/domain/repositories/ITranslationJobRepository";
-import { activeJobs } from "./activeJobs";
 
+export const GENERIC_FAILURE = "Something went wrong while processing. All held credits were returned.";
+
+/**
+ * Translating one video, as separate stages. Each stage loads the job, works on local
+ * copies of its files and stores what it made, so stages can run on different machines
+ * and be retried. The workflow in src/workflows/translate.ts runs them in order.
+ */
 export class ProcessTranslationJobUseCase {
   constructor(
     private readonly jobs: ITranslationJobRepository,
@@ -16,93 +22,141 @@ export class ProcessTranslationJobUseCase {
     private readonly media: IMediaRepository,
     private readonly ai: IAIRepository,
     private readonly separator: IAudioSeparator,
+    private readonly store: IFileStore,
   ) {}
 
-  async execute(jobId: string): Promise<void> {
-    activeJobs.add(jobId);
-    try {
-      await this.run(jobId);
-    } finally {
-      activeJobs.remove(jobId);
-    }
-  }
-
-  private async run(jobId: string): Promise<void> {
+  private async load(jobId: string) {
     const job = await this.jobs.findById(jobId);
-    if (!job) throw new Error(`Job ${jobId} not found`);
-    const dir = job.files.dir!;
-    const files = { ...job.files };
-
-    try {
-      // 1. Audio (only the part being translated)
-      await this.jobs.updateStatus(jobId, "extracting", 6);
-      files.audio = path.join(dir, "audio.mp3");
-      await this.media.extractAudio(files.original!, files.audio, job.trimSec);
-
-      // 2. Split voices from music and sounds
-      let speechAudio = files.audio;
-      if (job.keepBackground) {
-        await this.jobs.updateStatus(jobId, "separating", 14);
-        const sep = await this.separator.separate(files.audio, dir);
-        files.vocals = sep.vocalsPath;
-        files.background = sep.backgroundPath;
-        speechAudio = sep.vocalsPath; // cleaner speech → better transcription and cloning
-      }
-
-      // 3. Transcribe + find speakers
-      await this.jobs.updateStatus(jobId, "transcribing", 28);
-      const transcript = await this.ai.transcribe(speechAudio);
-      const language = transcript.language;
-      const segments = collapseRepeats(transcript.segments);
-      if (!segments.length) throw new UserFacingError("We couldn’t find any speech in the audio track.");
-      await this.jobs.update(jobId, { sourceLanguage: language, files });
-
-      // 4. Translate
-      await this.jobs.updateStatus(jobId, "translating", 45);
-      const translated = await this.ai.translate(segments, job.targetLanguage);
-
-      // 5. Voices
-      await this.jobs.updateStatus(jobId, "synthesizing", 60);
-      files.segments = await this.ai.synthesizeSegments(translated, job.targetLanguage, dir, { voice: job.voice, sourceAudioPath: speechAudio });
-
-      // 6. Mix + render
-      await this.jobs.updateStatus(jobId, "merging", 85);
-      const lines = toLines(segments, translated);
-      await this.renderVideo(job, files, lines, translated);
-
-      const used = this.finalCost(job, lines);
-      await this.credits.settle(job.userId, job.held, used, job.name);
-      await this.jobs.update(jobId, { status: "completed", progress: 100, used, lines, speakers: speakerShares(lines), files, error: null });
-    } catch (err) {
-      const message = err instanceof UserFacingError ? err.message : "Something went wrong while processing. All held credits were returned.";
-      console.error(`[ProcessJob ${jobId}]`, err);
-      await this.credits.settle(job.userId, job.held, 0, job.name).catch((e) => console.error("[ProcessJob] refund failed", e));
-      await this.jobs.update(jobId, { status: "failed", error: message, files }).catch(() => {});
-    }
+    if (!job) throw new UserFacingError("This video was removed.");
+    return job;
   }
 
-  /** Stitches the voiced lines, lays them over the background, and renders the final video. */
-  async renderVideo(job: TranslationJob, files: TranslationJob["files"], lines: TranscriptLine[], segments: TranscriptionSegment[]) {
-    const dir = files.dir!;
-    files.voices = path.join(dir, "voices.mp3");
-    await this.ai.stitch(segments, files.segments ?? [], files.voices);
-    let finalAudio = files.voices;
+  /** Storage key and local working path for a new file of the job. */
+  private out(job: TranslationJob, name: string) {
+    const dir = job.files.dir!;
+    return { key: `${dir}/${name}`, local: path.join(this.store.workDir(dir), name) };
+  }
+
+  /** 1. The audio of the part being translated. */
+  async extract(jobId: string): Promise<{ keepBackground: boolean }> {
+    const job = await this.load(jobId);
+    await this.jobs.updateStatus(jobId, "extracting", 6);
+    const audio = this.out(job, "audio.mp3");
+    await this.media.extractAudio(await this.store.fetch(job.files.original!), audio.local, job.trimSec);
+    await this.store.save(audio.key, audio.local);
+    await this.jobs.update(jobId, { files: { ...job.files, audio: audio.key } });
+    return { keepBackground: job.keepBackground };
+  }
+
+  /** 2. Split voices from music and sounds. */
+  async separate(jobId: string) {
+    const job = await this.load(jobId);
+    await this.jobs.updateStatus(jobId, "separating", 14);
+    const sep = await this.separator.separate(await this.store.fetch(job.files.audio!), this.store.workDir(job.files.dir!));
+    const vocals = this.out(job, "vocals.mp3"), background = this.out(job, "background.mp3");
+    await Promise.all([this.store.save(vocals.key, sep.vocalsPath), this.store.save(background.key, sep.backgroundPath)]);
+    await this.jobs.update(jobId, { files: { ...job.files, vocals: vocals.key, background: background.key } });
+  }
+
+  /** 3–4. Transcribe, find speakers, translate. Returns how many lines there are to voice. */
+  async transcribeAndTranslate(jobId: string): Promise<number> {
+    const job = await this.load(jobId);
+    await this.jobs.updateStatus(jobId, "transcribing", 28);
+    // cleaner speech (no music) → better transcription and cloning
+    const transcript = await this.ai.transcribe(await this.store.fetch(job.files.vocals ?? job.files.audio!));
+    const segments = collapseRepeats(transcript.segments);
+    if (!segments.length) throw new UserFacingError("We couldn’t find any speech in the audio track.");
+    await this.jobs.update(jobId, { sourceLanguage: transcript.language });
+
+    await this.jobs.updateStatus(jobId, "translating", 45);
+    const translated = await this.ai.translate(segments, job.targetLanguage);
+    const lines = toLines(segments, translated);
+    await this.jobs.update(jobId, { lines, files: { ...job.files, segments: [] } });
+    return lines.length;
+  }
+
+  /** 5. Voice lines from..to-1. */
+  async synthesize(jobId: string, from: number, to: number) {
+    const job = await this.load(jobId);
+    const total = job.lines!.length;
+    await this.jobs.updateStatus(jobId, "synthesizing", Math.round(60 + (25 * from) / Math.max(1, total)));
+    const sourceAudio = job.voice === "cloned" ? await this.store.fetch(job.files.vocals ?? job.files.audio!) : null;
+    const made = await this.ai.synthesizeSegments(toSegments(job.lines!), job.targetLanguage, this.store.workDir(job.files.dir!), {
+      voice: job.voice, sourceAudioPath: sourceAudio, range: [from, to],
+    });
+    const segments = Array.from({ length: total }, (_, i) => job.files.segments?.[i] ?? "");
+    await Promise.all(made.map(async (file, i) => {
+      if (!file) return;
+      const key = `${job.files.dir}/${path.basename(file)}`;
+      await this.store.save(key, file);
+      segments[i] = key;
+    }));
+    await this.jobs.update(jobId, { files: { ...job.files, segments } });
+  }
+
+  /** 6. Mix and render the final video. */
+  async render(jobId: string) {
+    const job = await this.load(jobId);
+    await this.jobs.updateStatus(jobId, "merging", 85);
+    if (!job.files.segments?.some(Boolean)) throw new Error("No audio segments synthesized.");
+    const files = await this.renderVideo(job, job.lines!);
+    await this.jobs.update(jobId, { files });
+  }
+
+  /** 7. Charge what was used, give back the rest, and show the result. */
+  async finish(jobId: string) {
+    const job = await this.load(jobId);
+    if (job.status === "completed" || job.status === "failed") return; // already settled
+    const lines = job.lines!;
+    const used = this.finalCost(job, lines);
+    await this.credits.settle(job.userId, job.held, used, job.name);
+    await this.jobs.update(jobId, { status: "completed", progress: 100, used, speakers: speakerShares(lines), error: null });
+  }
+
+  /** Something failed for good: give every held credit back. */
+  async fail(jobId: string, message: string | null) {
+    const job = await this.jobs.findById(jobId);
+    if (!job || job.status === "completed" || job.status === "failed") return;
+    await this.credits.settle(job.userId, job.held, 0, job.name);
+    await this.jobs.update(jobId, { status: "failed", error: message ?? GENERIC_FAILURE });
+  }
+
+  /**
+   * Stitches the voiced lines, lays them over the background, and renders the final video.
+   * Returns the job's files with the new ones (the caller saves them).
+   */
+  async renderVideo(job: TranslationJob, lines: TranscriptLine[]): Promise<JobFiles> {
+    const files = { ...job.files };
+    const segs = toSegments(lines);
+    const segmentFiles = await Promise.all((files.segments ?? []).map((k) => (k ? this.store.fetch(k).catch(() => "") : "")));
+
+    const voices = this.out(job, "voices.mp3");
+    await this.ai.stitch(segs, segmentFiles, voices.local);
+    await this.store.save(voices.key, voices.local);
+    files.voices = voices.key;
+    let finalAudio = voices.local;
+    delete files.mixed;
     if (files.background) {
-      files.mixed = path.join(dir, "mixed.mp3");
-      await this.media.mixVoiceOverBackground(files.voices, files.background, files.mixed);
-      finalAudio = files.mixed;
+      const mixed = this.out(job, "mixed.mp3");
+      await this.media.mixVoiceOverBackground(voices.local, await this.store.fetch(files.background), mixed.local);
+      await this.store.save(mixed.key, mixed.local);
+      files.mixed = mixed.key;
+      finalAudio = mixed.local;
     }
     // New name each render: the previous file may still be streaming to the browser.
     const previous = files.video;
-    files.video = path.join(dir, `translated-${Date.now()}.mp4`);
-    await this.media.render(files.original!, finalAudio, files.video, {
+    const video = this.out(job, `translated-${Date.now()}.mp4`);
+    await this.media.render(await this.store.fetch(files.original!), finalAudio, video.local, {
       trimSec: job.trimSec,
       blurSubtitles: job.blurSubtitles,
       subtitles: job.burnSubtitles ? lines.map((l) => ({ start: l.start, end: l.end, text: l.text })) : undefined,
       language: job.targetLanguage,
-      template: job.template ?? undefined,
+      template: job.template ? await localTemplate(this.store, job.template) : undefined,
     });
-    if (previous && previous !== files.video) setTimeout(() => fs.rm(previous, { force: true }, () => {}), 60_000);
+    await this.store.save(video.key, video.local);
+    files.video = video.key;
+    if (previous && previous !== files.video) setTimeout(() => this.store.deletePrefix(previous).catch(() => {}), 60_000);
+    return files;
   }
 
   private finalCost(job: TranslationJob, lines: TranscriptLine[]) {
@@ -111,6 +165,14 @@ export class ProcessTranslationJobUseCase {
     const heldSubtotal = estimateDub(job.durationSec, opts, "studio").subtotal; // plan doesn't change the subtotal
     return Math.min(actualDubCost(job.durationSec, speechSec, opts, heldSubtotal), job.held);
   }
+}
+
+/** The template with local copies of its images and clips, for ffmpeg. */
+export async function localTemplate(store: IFileStore, t: RenderTemplate): Promise<RenderTemplate> {
+  return {
+    ...t,
+    layers: await Promise.all(t.layers.map(async (L) => (L.file ? { ...L, file: await store.fetch(L.file).catch(() => undefined) } : L))),
+  };
 }
 
 /** An error whose message is safe and useful to show to the user. */

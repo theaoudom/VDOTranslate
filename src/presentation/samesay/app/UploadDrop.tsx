@@ -2,31 +2,13 @@
 
 import { useRef, useState, type DragEvent, type ReactNode } from "react";
 import { useToast } from "../Toast";
+import { sendFile } from "./sendFile";
 
 export interface UploadedVideo {
   uploadId: string;
   name: string;
   size: number;
   durationSec: number;
-}
-
-/** Sends the file to /api/uploads with real progress. */
-function upload(file: File, onProgress: (p: number) => void): Promise<UploadedVideo> {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    const form = new FormData();
-    form.append("video", file);
-    xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total);
-    xhr.onload = () => {
-      let body: { error?: string } & Partial<UploadedVideo> = {};
-      try { body = JSON.parse(xhr.responseText); } catch {}
-      if (xhr.status >= 200 && xhr.status < 300) resolve(body as UploadedVideo);
-      else reject(new Error(body.error ?? "Upload failed. Please try again."));
-    };
-    xhr.onerror = () => reject(new Error("Upload failed. Check your connection and try again."));
-    xhr.open("POST", "/api/uploads");
-    xhr.send(form);
-  });
 }
 
 /**
@@ -49,7 +31,7 @@ export function UploadDrop({ className, onUploaded, children }: { className: str
     setName(file.name);
     setProgress(0);
     try {
-      const v = await upload(file, setProgress);
+      const v = await sendFile<UploadedVideo>("video", file, setProgress);
       setProgress(1);
       onUploaded(v);
     } catch (e) {

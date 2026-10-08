@@ -1,0 +1,10 @@
+# never upload local videos, secrets or build output
+uploads
+.env*
+!.env.local.example
+.next
+.workflow-data
+scripts/out
+node_modules
+out
+tsconfig.tsbuildinfo

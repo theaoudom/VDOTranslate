@@ -27,7 +27,7 @@ export class RecoverStuckJobsUseCase {
       const tooLong = ageMin >= hardLimitMinutes && idleMin >= staleMinutes;
       if (!orphaned && !tooLong) continue;
 
-      if (job.lines && job.status === "merging") {
+      if (job.kind === "dub" && job.used > 0 && job.status === "merging") {
         // A re-voice of one line was interrupted: the video before it is still fine.
         await this.credits.settle(job.userId, REVOICE_LINE_CREDITS, 0, job.name);
         await this.jobs.update(job.id, { status: "completed", progress: 100, error: "We couldn’t re-voice that line. Your credit was returned." });

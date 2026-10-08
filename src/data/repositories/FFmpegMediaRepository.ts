@@ -115,7 +115,8 @@ export class FFmpegMediaRepository implements IMediaRepository {
         cues: options.subtitles ?? [], width: size.w, height: size.h, font: subtitleFont(options.language), textLayers: texts, duration,
       }), "utf8");
       // Relative names + cwd avoid Windows drive-letter escaping inside the filter string.
-      const fontsRel = path.relative(workDir, FONTS_DIR).split(path.sep).join("/");
+      // (on another Windows drive the path stays absolute: escape the drive colon)
+      const fontsRel = path.relative(workDir, FONTS_DIR).split(path.sep).join("/").replace(/:/g, "\\:");
       step(`ass=subtitles.ass:fontsdir='${fontsRel}':shaping=complex`);
     }
 
@@ -134,36 +135,42 @@ export class FFmpegMediaRepository implements IMediaRepository {
 }
 
 /**
- * One font per script so every character matches. Khmer uses the bundled Noto font;
- * the others are standard Windows fonts (bundle Noto CJK etc. before hosting on Linux).
+ * One font per script so every character matches. All are open Noto fonts bundled in
+ * assets/fonts (scripts/fetch-fonts.mjs), so videos look the same on Windows and on Linux servers.
  */
 export function subtitleFont(language?: string): string {
   const base = (language ?? "").split("-")[0];
   const fonts: Record<string, string> = {
-    km: "Noto Sans Khmer", lo: "Leelawadee UI", my: "Myanmar Text",
-    zh: language === "zh-TW" ? "Microsoft JhengHei" : "Microsoft YaHei", ja: "Yu Gothic", ko: "Malgun Gothic",
-    hi: "Nirmala UI", ar: "Segoe UI", fa: "Segoe UI",
+    km: "Noto Sans Khmer", lo: "Noto Sans Lao", my: "Noto Sans Myanmar",
+    zh: language === "zh-TW" ? "Noto Sans TC" : "Noto Sans SC", ja: "Noto Sans JP", ko: "Noto Sans KR",
+    hi: "Noto Sans Devanagari", ar: "Noto Sans Arabic", fa: "Noto Sans Arabic",
   };
-  return fonts[base] ?? "Segoe UI";
+  return fonts[base] ?? "Noto Sans";
 }
 
 /**
  * libass sizes text by the font's full height (OS/2 winAscent + winDescent), while the editor
  * (CSS) sizes it by the em. Multiply by this ratio so exports match the preview.
- * Measured from the font files; Khmer fonts are much taller to fit stacked letters.
+ * Measured from the font files; Khmer and Myanmar fonts are much taller to fit stacked letters.
  */
-const FONT_HEIGHT: Record<string, number> = { "Noto Sans Khmer": 1.862, "Segoe UI": 1.33 };
-const DEFAULT_FONT_HEIGHT = 1.33;
+const FONT_HEIGHT: Record<string, number> = {
+  "Noto Sans": 1.519, "Noto Sans Khmer": 1.862, "Noto Sans Lao": 1.645, "Noto Sans Myanmar": 2.184,
+  "Noto Sans SC": 1.448, "Noto Sans TC": 1.448, "Noto Sans JP": 1.448, "Noto Sans KR": 1.448,
+  "Noto Sans Devanagari": 1.906, "Noto Sans Arabic": 2.169,
+};
+const DEFAULT_FONT_HEIGHT = 1.519;
 
 /** Font for a template text, picked from the characters it uses. */
 function fontForText(text: string): string {
   if (/[ក-៿]/.test(text)) return "Noto Sans Khmer";
-  if (/[຀-໿]/.test(text)) return "Leelawadee UI";
-  if (/[က-႟]/.test(text)) return "Myanmar Text";
-  if (/[぀-ヿ]/.test(text)) return "Yu Gothic";
-  if (/[가-힯]/.test(text)) return "Malgun Gothic";
-  if (/[一-鿿]/.test(text)) return "Microsoft YaHei";
-  return "Segoe UI";
+  if (/[຀-໿]/.test(text)) return "Noto Sans Lao";
+  if (/[က-႟]/.test(text)) return "Noto Sans Myanmar";
+  if (/[぀-ヿ]/.test(text)) return "Noto Sans JP";
+  if (/[가-힯]/.test(text)) return "Noto Sans KR";
+  if (/[一-鿿]/.test(text)) return "Noto Sans SC";
+  if (/[ऀ-ॿ]/.test(text)) return "Noto Sans Devanagari";
+  if (/[؀-ۿ]/.test(text)) return "Noto Sans Arabic";
+  return "Noto Sans";
 }
 
 const assTime = (s: number) => {

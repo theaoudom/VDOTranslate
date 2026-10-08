@@ -407,7 +407,9 @@ Return strict JSON exactly matching this format: { "results": [ { "id": number, 
       throw new Error(`The ${voice} voice isn't available for "${language}".`);
     }
     const only = options.onlyIndex;
-    console.log(`[TTS] Synthesizing ${only == null ? segments.length + " segments" : "segment " + only} (${voice})...`);
+    const [from, to] = only != null ? [only, only + 1] : options.range ?? [0, segments.length];
+    const wanted = (i: number) => i >= from && i < to;
+    console.log(`[TTS] Synthesizing segments ${from}–${to - 1} of ${segments.length} (${voice})...`);
 
     // Profiles come from all segments so every speaker keeps the same voice as before.
     const voiceProfiles = await this.buildSpeakerVoiceProfiles(segments, {
@@ -415,13 +417,13 @@ Return strict JSON exactly matching this format: { "results": [ { "id": number, 
       cloneVoices: voice === "cloned",
       sourceAudioPath: options.sourceAudioPath ?? null,
       tempDir: outDir,
-      onlySpeaker: only == null ? undefined : segments[only]?.speaker,
+      onlySpeakers: new Set(segments.filter((_, i) => wanted(i)).map((s) => s.speaker)),
     });
 
     const files: string[] = [];
     try {
       for (let i = 0; i < segments.length; i++) {
-        if (only != null && i !== only) { files.push(""); continue; }
+        if (!wanted(i)) { files.push(""); continue; }
         const seg = segments[i];
         const profile = voiceProfiles.get(seg.speaker)!;
         const file = path.join(outDir, `seg_${i}.mp3`);
@@ -440,7 +442,7 @@ Return strict JSON exactly matching this format: { "results": [ { "id": number, 
       // Cloned voices are job-scoped — delete them from the ElevenLabs account when done
       await this.deleteClonedVoices(voiceProfiles);
     }
-    if (only == null && files.every((f) => !f)) throw new Error("No audio segments synthesized.");
+    if (only == null && to - from > 0 && files.every((f) => !f)) throw new Error("No audio segments synthesized.");
     return files;
   }
 
@@ -452,7 +454,7 @@ Return strict JSON exactly matching this format: { "results": [ { "id": number, 
    */
   private async buildSpeakerVoiceProfiles(
     segments: TranscriptionSegment[],
-    opts: { hasElevenLabs: boolean; cloneVoices: boolean; sourceAudioPath: string | null; tempDir: string; onlySpeaker?: string },
+    opts: { hasElevenLabs: boolean; cloneVoices: boolean; sourceAudioPath: string | null; tempDir: string; onlySpeakers?: Set<string> },
   ): Promise<Map<string, SpeakerVoiceProfile>> {
     const profiles = new Map<string, SpeakerVoiceProfile>();
     const speakerSegments = new Map<string, TranscriptionSegment[]>();
@@ -488,7 +490,7 @@ Return strict JSON exactly matching this format: { "results": [ { "id": number, 
       };
 
       // Try to clone the speaker's real voice from the original audio
-      if (opts.cloneVoices && opts.hasElevenLabs && opts.sourceAudioPath && (!opts.onlySpeaker || opts.onlySpeaker === speaker)) {
+      if (opts.cloneVoices && opts.hasElevenLabs && opts.sourceAudioPath && (!opts.onlySpeakers || opts.onlySpeakers.has(speaker))) {
         try {
           const samplePath = path.join(opts.tempDir, `voice_sample_${speaker.replace(/\W/g, "_")}_${Date.now()}.mp3`);
           await this.extractSpeakerSample(opts.sourceAudioPath, segs, samplePath);

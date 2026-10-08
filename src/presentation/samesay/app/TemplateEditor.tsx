@@ -15,6 +15,8 @@ import { Scene } from "../landing/Scene";
 import { useToast } from "../Toast";
 import { CostTable, MeterAfter } from "./bits";
 import { fmt, mmss, tcode } from "./format";
+import { sendFile } from "./sendFile";
+import type { UploadedVideo } from "./UploadDrop";
 
 export interface PreviewSource {
   kind: "job" | "upload";
@@ -276,11 +278,8 @@ export function TemplateEditor({ initialTemplates, sources: initialSources, init
     if (!L) return;
     const target = L;
     toast("Uploading " + file.name + "…");
-    const form = new FormData();
-    form.append("file", file);
-    const res = await fetch("/api/templates/assets", { method: "POST", body: form });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) { toast(body.error ?? "Upload failed", true); return; }
+    let body: { asset: string; ar: number; type: "image" | "video" };
+    try { body = await sendFile("asset", file); } catch (e) { toast(e instanceof Error ? e.message : "Upload failed", true); return; }
     updLayer(target.id, { asset: body.asset, ar: body.ar, type: body.type === "video" ? "video" : target.type === "text" ? "image" : body.type });
     toast("Added " + file.name);
   }
@@ -311,11 +310,8 @@ export function TemplateEditor({ initialTemplates, sources: initialSources, init
   async function useUploadedSource(file: File) {
     setMenu(null);
     toast("Uploading " + file.name + "…");
-    const form = new FormData();
-    form.append("video", file);
-    const res = await fetch("/api/uploads", { method: "POST", body: form });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) { toast(body.error ?? "Upload failed", true); return; }
+    let body: UploadedVideo;
+    try { body = await sendFile<UploadedVideo>("video", file); } catch (e) { toast(e instanceof Error ? e.message : "Upload failed", true); return; }
     const s: PreviewSource = { kind: "upload", id: body.uploadId, name: body.name, durationSec: body.durationSec, url: `/api/uploads/${body.uploadId}/video` };
     setSources((list) => [s, ...list]);
     setSource(s);

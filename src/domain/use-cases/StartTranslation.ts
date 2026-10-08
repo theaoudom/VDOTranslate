@@ -10,7 +10,9 @@ export interface StartTranslationInput {
   userId: string;
   jobId: string;
   name: string;
+  /** storage key of the uploaded video */
   videoPath: string;
+  /** storage folder for the job */
   jobDir: string;
   durationSec: number;
   targetLanguage: string;

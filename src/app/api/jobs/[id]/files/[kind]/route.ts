@@ -1,8 +1,7 @@
-import fs from "fs";
 import path from "path";
-import { Readable } from "stream";
 import { NextResponse, type NextRequest } from "next/server";
 import { buildContainer } from "@/lib/container";
+import { streamFile } from "@/lib/serveFile";
 import { requireUser } from "@/lib/session";
 
 const TYPES: Record<string, string> = { ".mp4": "video/mp4", ".mov": "video/quicktime", ".webm": "video/webm", ".mkv": "video/x-matroska", ".mp3": "audio/mpeg", ".srt": "application/x-subrip" };
@@ -31,28 +30,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string; 
   }
 
   const file = params.kind === "video" ? job.files.video : params.kind === "original" ? job.files.original : params.kind === "audio" ? job.files.mixed ?? job.files.voices : undefined;
-  if (!file || !fs.existsSync(file)) return NextResponse.json({ error: "Not ready yet." }, { status: 404 });
-
-  const size = fs.statSync(file).size;
+  if (!file) return NextResponse.json({ error: "Not ready yet." }, { status: 404 });
   const ext = path.extname(file).toLowerCase();
   const name = params.kind === "original" ? job.name : `${base}-${job.targetLanguage}${ext}`;
-  const headers: Record<string, string> = {
-    "Content-Type": TYPES[ext] ?? "application/octet-stream",
-    "Accept-Ranges": "bytes",
-    "Cache-Control": "private, no-store",
-    ...(download ? { "Content-Disposition": `attachment; filename="${safe(name)}"` } : {}),
-  };
-
-  const range = /bytes=(\d*)-(\d*)/.exec(req.headers.get("range") ?? "");
-  if (range && !download) {
-    const start = range[1] ? parseInt(range[1], 10) : 0;
-    const end = range[2] ? Math.min(parseInt(range[2], 10), size - 1) : size - 1;
-    if (start >= size || start > end) return new NextResponse(null, { status: 416, headers: { "Content-Range": `bytes */${size}` } });
-    const stream = Readable.toWeb(fs.createReadStream(file, { start, end })) as ReadableStream;
-    return new NextResponse(stream, { status: 206, headers: { ...headers, "Content-Range": `bytes ${start}-${end}/${size}`, "Content-Length": String(end - start + 1) } });
-  }
-  const stream = Readable.toWeb(fs.createReadStream(file)) as ReadableStream;
-  return new NextResponse(stream, { headers: { ...headers, "Content-Length": String(size) } });
+  return streamFile(file, req.headers.get("range"), { cache: "private, no-store", downloadName: download ? name : undefined });
 }
 
 const safe = (s: string) => s.replace(/[^\w.\- ]+/g, "_");

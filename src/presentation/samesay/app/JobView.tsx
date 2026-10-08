@@ -33,7 +33,8 @@ function useJob(initial: PublicJob) {
 
 export function JobView({ initial }: { initial: PublicJob }) {
   const [job, setJob] = useJob(initial);
-  const revoicing = job.status === "merging" && job.lines != null;
+  // A finished video being re-rendered after a line fix (a first render has no charge yet).
+  const revoicing = job.status === "merging" && job.kind === "dub" && job.used > 0;
   if (job.status === "failed") return <FailedView job={job} />;
   if (isRunning(job) && !revoicing) return <ProcessingView job={job} />;
   if (job.kind === "edit") return <EditResultView job={job} />;

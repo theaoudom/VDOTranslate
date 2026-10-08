@@ -1,12 +1,13 @@
-import fs from "fs";
-import path from "path";
 import { NextResponse, type NextRequest } from "next/server";
 import type { VoiceKind } from "@/domain/billing/pricing";
 import { toPublicJob } from "@/domain/entities/TranslationJob";
 import { SUPPORTED_LANGUAGES } from "@/domain/entities/Language";
-import { buildContainer, jobDir } from "@/lib/container";
+import { start } from "workflow/api";
+import { buildContainer } from "@/lib/container";
 import { requireUser } from "@/lib/session";
 import { loadJobTemplate } from "@/lib/templateAssets";
+import { readUpload } from "@/lib/uploads";
+import { translateVideo } from "@/workflows/jobs";
 
 const VOICES: VoiceKind[] = ["cloned", "natural", "standard"];
 
@@ -31,15 +32,12 @@ export async function POST(req: NextRequest) {
   if (!SUPPORTED_LANGUAGES.some((l) => l.code === target)) return NextResponse.json({ error: "Choose a language to translate to." }, { status: 400 });
   if (!VOICES.includes(voice)) return NextResponse.json({ error: "Choose a voice." }, { status: 400 });
 
-  let dir: string;
-  try { dir = jobDir(auth.user.id, uploadId); } catch { return NextResponse.json({ error: "Upload not found." }, { status: 404 }); }
-  const metaPath = path.join(dir, "upload.json");
-  if (!fs.existsSync(metaPath)) return NextResponse.json({ error: "Upload not found. Please upload the video again." }, { status: 404 });
-  const meta = JSON.parse(fs.readFileSync(metaPath, "utf8")) as { name: string; ext: string; durationSec: number };
+  const meta = await readUpload(auth.user.id, uploadId);
+  if (!meta) return NextResponse.json({ error: "Upload not found. Please upload the video again." }, { status: 404 });
 
   const c = buildContainer();
   const result = await c.startTranslation.execute({
-    userId: auth.user.id, jobId: uploadId, name: meta.name, videoPath: path.join(dir, "original" + meta.ext), jobDir: dir,
+    userId: auth.user.id, jobId: uploadId, name: meta.name, videoPath: meta.video, jobDir: meta.key,
     durationSec: meta.durationSec, targetLanguage: target, sourceLanguage: source, voice,
     keepBackground: Boolean(body?.keepBackground), burnSubtitles: Boolean(body?.burnSubtitles), blurSubtitles: Boolean(body?.blurSubtitles),
     trimSec: typeof body?.trimSec === "number" && body.trimSec > 0 ? body.trimSec : null,
@@ -47,7 +45,13 @@ export async function POST(req: NextRequest) {
   });
   if (!result.ok) return NextResponse.json({ error: result.message, code: result.code }, { status: result.code === "not_enough_credits" ? 402 : 400 });
 
-  // Fire and forget: the browser follows progress on the processing page.
-  c.processJob.execute(result.job.id).catch((err) => console.error(`[ProcessJob] ${result.job.id}`, err));
+  // Runs in the background: the browser follows progress on the processing page.
+  try {
+    await start(translateVideo, [result.job.id]);
+  } catch (err) {
+    console.error(`[ProcessJob] couldn't start ${result.job.id}`, err);
+    await c.processJob.fail(result.job.id, "We couldn’t start processing. All held credits were returned. Please try again.");
+    return NextResponse.json({ error: "We couldn’t start processing. Your credits were returned. Please try again." }, { status: 503 });
+  }
   return NextResponse.json({ jobId: result.job.id, held: result.job.held }, { status: 201 });
 }

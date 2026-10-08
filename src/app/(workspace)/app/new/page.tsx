@@ -1,33 +1,21 @@
-import fs from "fs";
-import path from "path";
 import type { Metadata } from "next";
 import { PLANS, type VoiceKind } from "@/domain/billing/pricing";
 import { SupabaseTemplateRepository } from "@/data/repositories/SupabaseRepositories";
 import type { Template } from "@/domain/entities/Template";
 import { loadAccount } from "@/lib/account";
-import { buildContainer, jobDir } from "@/lib/container";
+import { buildContainer } from "@/lib/container";
+import { readUpload } from "@/lib/uploads";
 import { getCurrentUser } from "@/lib/supabase/server";
 import { TranslateForm } from "@/presentation/samesay/app/TranslateForm";
 import { NewUpload } from "@/presentation/samesay/app/NewUpload";
 
 export const metadata: Metadata = { title: "Translate video" };
 
-function readUpload(userId: string, id?: string) {
-  if (!id) return null;
-  try {
-    const meta = path.join(jobDir(userId, id), "upload.json");
-    if (!fs.existsSync(meta)) return null;
-    const m = JSON.parse(fs.readFileSync(meta, "utf8")) as { name: string; size: number; durationSec: number };
-    return { uploadId: id, name: m.name, size: m.size, durationSec: m.durationSec };
-  } catch {
-    return null;
-  }
-}
-
 export default async function NewTranslationPage({ searchParams }: { searchParams: { upload?: string; to?: string; voice?: string } }) {
   const user = (await getCurrentUser())!;
   const account = await loadAccount(user);
-  const upload = readUpload(user.id, searchParams.upload);
+  const up = searchParams.upload ? await readUpload(user.id, searchParams.upload) : null;
+  const upload = up && { uploadId: searchParams.upload!, name: up.name, size: up.size, durationSec: up.durationSec };
 
   if (!upload) return <NewUpload maxMin={PLANS[account.plan].maxMin} planName={PLANS[account.plan].name} />;
 

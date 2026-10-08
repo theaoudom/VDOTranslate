@@ -37,3 +37,15 @@ next-env.d.ts
 
 # test outputs from scripts/
 /scripts/out/
+
+.vercel
+.env*
+
+# fonts downloaded at build time (scripts/fetch-fonts.mjs)
+/assets/fonts/*
+!/assets/fonts/NotoSansKhmer.ttf
+!/assets/fonts/OFL.txt
+
+# workflow local data and generated routes
+.workflow-data/
+/.swc

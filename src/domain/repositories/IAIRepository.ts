@@ -21,6 +21,8 @@ export interface SynthesizeOptions {
   sourceAudioPath?: string | null;
   /** Only voice this segment (re-voicing one corrected line) */
   onlyIndex?: number;
+  /** Only voice segments from..to-1 (long videos are voiced in batches) */
+  range?: [number, number];
 }
 
 export type VoiceAvailability = Record<VoiceKind, boolean>;

@@ -7,8 +7,7 @@ import { ProcessTranslationJobUseCase } from "@/domain/use-cases/ProcessTranslat
 import { ExportWithTemplateUseCase } from "@/domain/use-cases/ExportWithTemplate";
 import { RevoiceLineUseCase } from "@/domain/use-cases/RevoiceLine";
 import { StartTranslationUseCase } from "@/domain/use-cases/StartTranslation";
-
-export { getUploadsDir, jobDir } from "./uploads";
+import { fileStore } from "./uploads";
 
 export function buildContainer() {
   const jobs = new SupabaseJobRepository();
@@ -16,7 +15,8 @@ export function buildContainer() {
   const media = new FFmpegMediaRepository();
   const ai = new OpenAIAIRepository();
   const separator = new ReplicateAudioSeparator();
-  const process = new ProcessTranslationJobUseCase(jobs, credits, media, ai, separator);
+  const store = fileStore();
+  const process = new ProcessTranslationJobUseCase(jobs, credits, media, ai, separator, store);
 
   return {
     jobs,
@@ -24,9 +24,10 @@ export function buildContainer() {
     media,
     ai,
     separator,
+    store,
     startTranslation: new StartTranslationUseCase(jobs, credits, ai, separator),
     processJob: process,
-    revoiceLine: new RevoiceLineUseCase(jobs, credits, ai, process),
-    exportWithTemplate: new ExportWithTemplateUseCase(jobs, credits, media),
+    revoiceLine: new RevoiceLineUseCase(jobs, credits, ai, process, store),
+    exportWithTemplate: new ExportWithTemplateUseCase(jobs, credits, media, store),
   };
 }
