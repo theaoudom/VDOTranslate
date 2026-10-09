@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { CircleCheck, CircleX, OctagonAlert } from "lucide-react";
 import { SupabasePaymentRepository } from "@/data/repositories/SupabasePaymentRepository";
+import { PLANS } from "@/domain/billing/pricing";
 import { paymentLabel } from "@/domain/payments/Payment";
 import { verifyReview } from "@/lib/paymentLinks";
 import { customerOf } from "@/lib/payments";
@@ -41,7 +42,7 @@ export default async function ReviewPaymentPage({ params, searchParams }: { para
       body = (
         <>
           {details}
-          <div className={"note" + (ok ? "" : " rec")}>{ok ? <CircleCheck /> : <CircleX />}<div><b>{ok ? "Approved" : payment.status === "rejected" ? "Rejected" : payment.status === "cancelled" ? "Cancelled by the customer" : "Not sent yet"}.</b>{searchParams.done ? " Done." : " Nothing more to do."}</div></div>
+          <div className={"note" + (ok ? "" : " rec")}>{ok ? <CircleCheck /> : <CircleX />}<div><b>{ok ? `Approved · ${(payment.creditsAdded ?? payment.credits).toLocaleString("en-US")} credits added${payment.plan && payment.planStarted === false ? " (plan not started)" : ""}` : payment.status === "rejected" ? "Rejected" : payment.status === "cancelled" ? "Cancelled by the customer" : "Not sent yet"}.</b>{searchParams.done ? " Done." : " Nothing more to do."}</div></div>
         </>
       );
     } else {
@@ -55,7 +56,19 @@ export default async function ReviewPaymentPage({ params, searchParams }: { para
             <input type="hidden" name="id" value={payment.id} />
             <input type="hidden" name="a" value={a} />
             <input type="hidden" name="s" value={s} />
-            <button className={"btn lg block " + (approve ? "primary" : "danger")} type="submit">{approve ? <><CircleCheck />Approve and add credits</> : <><CircleX />Reject payment</>}</button>
+            {approve && (
+              <>
+                <div className="field">
+                  <label className="label" htmlFor="rv-credits">Credits to add</label>
+                  <input className="input num" id="rv-credits" name="credits" type="number" min={0} max={100000} step={1} defaultValue={payment.credits} />
+                  <span className="hint">The full price gives {payment.credits.toLocaleString("en-US")}. If they paid less, enter what to give, e.g. 50.</span>
+                </div>
+                {payment.plan && (
+                  <label className="switch"><input type="checkbox" name="startPlan" defaultChecked /><span className="track" />Start the {PLANS[payment.plan].name} plan for 1 month</label>
+                )}
+              </>
+            )}
+            <button className={"btn lg block " + (approve ? "primary" : "danger")} type="submit">{approve ? <><CircleCheck />Approve</> : <><CircleX />Reject payment</>}</button>
           </form>
         </>
       );

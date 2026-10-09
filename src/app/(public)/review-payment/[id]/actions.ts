@@ -10,6 +10,11 @@ export async function decidePayment(form: FormData) {
   const action = String(form.get("a") ?? "");
   const sig = String(form.get("s") ?? "");
   if (!verifyReview(id, action, sig)) redirect(`/review-payment/${encodeURIComponent(id)}?bad=1`);
-  const result = await buildPayments().decide(id, action === "approve", customerOf);
+  // Paid less than the price? The team can give fewer credits, or not start the plan month.
+  const text = String(form.get("credits") ?? "").trim();
+  const raw = Number(text);
+  const credits = text && Number.isInteger(raw) && raw >= 0 && raw <= 100_000 ? raw : undefined; // empty = full amount
+  const startPlan = form.get("startPlan") === "on";
+  const result = await buildPayments().decide(id, action === "approve", customerOf, { credits, startPlan });
   redirect(`/review-payment/${id}?a=${action}&s=${encodeURIComponent(sig)}&done=${encodeURIComponent(result)}`);
 }

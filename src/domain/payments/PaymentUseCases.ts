@@ -1,4 +1,4 @@
-import { newPaymentRef, priceOf, type Customer, type IPaymentNotifier, type IPaymentRepository, type Payment, type PaymentItem } from "./Payment";
+import { newPaymentRef, priceOf, type ApproveOptions, type Customer, type IPaymentNotifier, type IPaymentRepository, type Payment, type PaymentItem } from "./Payment";
 
 const MAX_WAITING = 3;
 
@@ -51,20 +51,27 @@ export class PaymentUseCases {
     return { ok: true, payment: p };
   }
 
-  /** The team's answer from Telegram. Returns a short text to show on the button press. */
-  async decide(id: string, approve: boolean, customerOf: (userId: string) => Promise<Customer>): Promise<string> {
+  /**
+   * The team's answer from the review page. `opts.credits` gives a different amount when
+   * someone paid only part of the price. Returns a short text to show.
+   */
+  async decide(id: string, approve: boolean, customerOf: (userId: string) => Promise<Customer>, opts: ApproveOptions = {}): Promise<string> {
     const found = await this.payments.findById(id);
     if (!found) return "Payment not found.";
     if (found.status !== "pending") return `Already ${found.status}.`;
     let p: Payment | null;
     if (approve) {
-      if (!(await this.payments.approve(id))) return "Already handled.";
-      p = { ...found, status: "approved", decidedAt: new Date() };
+      const credits = opts.credits ?? found.credits;
+      const startPlan = Boolean(found.plan) && opts.startPlan !== false;
+      if (!(await this.payments.approve(id, { credits, startPlan }))) return "Already handled.";
+      p = { ...found, status: "approved", decidedAt: new Date(), creditsAdded: credits, planStarted: startPlan };
     } else {
       p = await this.payments.transition(id, ["pending"], "rejected", { decidedAt: new Date() });
       if (!p) return "Already handled.";
     }
-    const note = approve ? `✅ Approved · ${p.credits.toLocaleString("en-US")} credits added` : "❌ Rejected · no credits added";
+    const added = p.creditsAdded ?? p.credits;
+    const note = !approve ? "❌ Rejected · no credits added"
+      : `✅ Approved · ${added.toLocaleString("en-US")} credits added` + (added !== p.credits ? ` (part payment, of ${p.credits.toLocaleString("en-US")})` : "") + (p.plan && !p.planStarted ? " · plan not started" : "");
     await this.notifier.update(p, await customerOf(p.userId), note).catch((e) => console.error("[payments] Telegram update failed", e));
     return approve ? "Approved ✅" : "Rejected ❌";
   }

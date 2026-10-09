@@ -16,6 +16,10 @@ export interface Payment {
   credits: number;
   usd: number;
   status: PaymentStatus;
+  /** credits actually given when approved (less than `credits` for a part payment) */
+  creditsAdded: number | null;
+  /** whether approving started the plan month */
+  planStarted: boolean | null;
   tgMessageId: number | null;
   createdAt: Date;
   paidAt: Date | null;
@@ -23,7 +27,7 @@ export interface Payment {
 }
 
 /** What the browser may see. */
-export type PublicPayment = Pick<Payment, "id" | "ref" | "kind" | "plan" | "credits" | "usd" | "status"> & { paidAt: string | null; label: string };
+export type PublicPayment = Pick<Payment, "id" | "ref" | "kind" | "plan" | "credits" | "creditsAdded" | "planStarted" | "usd" | "status"> & { paidAt: string | null; label: string };
 
 export type PaymentItem = { kind: "pack"; index: number } | { kind: "plan"; plan: PaidPlan };
 
@@ -42,7 +46,10 @@ export function paymentLabel(p: Pick<Payment, "kind" | "plan" | "credits">) {
 }
 
 export function toPublicPayment(p: Payment): PublicPayment {
-  return { id: p.id, ref: p.ref, kind: p.kind, plan: p.plan, credits: p.credits, usd: p.usd, status: p.status, paidAt: p.paidAt?.toISOString() ?? null, label: paymentLabel(p) };
+  return {
+    id: p.id, ref: p.ref, kind: p.kind, plan: p.plan, credits: p.credits, creditsAdded: p.creditsAdded, planStarted: p.planStarted,
+    usd: p.usd, status: p.status, paidAt: p.paidAt?.toISOString() ?? null, label: paymentLabel(p),
+  };
 }
 
 /** Short note for the transfer, easy to read and type: SS-4K7Q (no 0/O/1/I). */
@@ -58,10 +65,18 @@ export interface IPaymentRepository {
   /** Moves the payment from one of `from` to `to`; null when it wasn't in `from`. */
   transition(id: string, from: PaymentStatus[], to: PaymentStatus, extra?: Partial<Pick<Payment, "paidAt" | "decidedAt">>): Promise<Payment | null>;
   setMessageId(id: string, messageId: number): Promise<void>;
-  /** Adds the credits (and plan month) exactly once. False when it wasn't pending. */
-  approve(id: string): Promise<boolean>;
+  /**
+   * Adds the credits (and plan month) exactly once. False when it wasn't pending.
+   * `credits` overrides the amount (part payments); `startPlan` false keeps the current plan.
+   */
+  approve(id: string, opts?: ApproveOptions): Promise<boolean>;
   /** Pay windows that were opened but never sent. */
   deleteOpenBefore(date: Date): Promise<void>;
+}
+
+export interface ApproveOptions {
+  credits?: number;
+  startPlan?: boolean;
 }
 
 export interface Customer {

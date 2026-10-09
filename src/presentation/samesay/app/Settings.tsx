@@ -46,7 +46,11 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     let changed = false;
     for (const p of info.payments) {
       const before = known.current.get(p.id);
-      if (before === "pending" && p.status === "approved") { toast(`Payment confirmed · ${fmt(p.credits)} credits added`); changed = true; }
+      if (before === "pending" && p.status === "approved") {
+        const added = p.creditsAdded ?? p.credits;
+        toast(added < p.credits ? `We received part of your payment · ${fmt(added)} credits added` : `Payment confirmed · ${fmt(added)} credits added`);
+        changed = true;
+      }
       if (before === "pending" && p.status === "rejected") { toast(`We couldn’t find your payment ${p.ref}. Please contact us.`, true); changed = true; }
       known.current.set(p.id, p.status);
     }
