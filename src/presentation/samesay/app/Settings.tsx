@@ -370,7 +370,7 @@ function PayDialog({ item, onClose, onSent }: {
               <div className="hstack" style={{ gap: "var(--sp-4)", alignItems: "center", flexWrap: "wrap" }}>
                 {data.pay.hasQr && (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src="/api/payments/qr" alt="KHQR code to pay" width={164} height={164} style={{ border: "1px solid var(--line)", borderRadius: "var(--r-md)", background: "#fff", objectFit: "contain" }} />
+                  <img src="/api/payments/qr" alt="KHQR code to pay" width={200} height={200} style={{ border: "1px solid var(--line)", borderRadius: "var(--r-md)", background: "#fff", objectFit: "contain" }} />
                 )}
                 <div className="stack" style={{ gap: 6, minWidth: 200, flex: 1 }}>
                   {data.pay.hasQr && <b className="t-small">Scan with any bank app (KHQR)</b>}

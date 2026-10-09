@@ -12,14 +12,18 @@ export function buildPayments() {
   return new PaymentUseCases(new SupabasePaymentRepository(), new TelegramPaymentNotifier((p, action) => reviewLink(p.id, action), reviewLinksReady()));
 }
 
-/** Where people send the money: set in .env.local, plus the KHQR picture at assets/khqr.png. */
-export const QR_FILE = path.join(process.cwd(), "assets", "khqr.png");
+/**
+ * Where people send the money: set in .env.local, plus the KHQR picture at assets/khqr.png
+ * (assets/khqr-code.png, just the code cut out of it, is shown instead when present).
+ */
+const QR_FILES = ["khqr-code.png", "khqr.png"].map((f) => path.join(process.cwd(), "assets", f));
+export const qrFile = () => QR_FILES.find((f) => fs.existsSync(f)) ?? null;
 export function payDetails() {
   return {
     bank: process.env.PAY_BANK ?? "",
     name: process.env.PAY_ACCOUNT_NAME ?? "",
     account: process.env.PAY_ACCOUNT_NUMBER ?? "",
-    hasQr: fs.existsSync(QR_FILE),
+    hasQr: Boolean(qrFile()),
   };
 }
 

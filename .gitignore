@@ -49,3 +49,6 @@ next-env.d.ts
 # workflow local data and generated routes
 .workflow-data/
 /.swc
+
+# personal payment QR (deployed from the local folder, kept out of git)
+/assets/khqr*.png
