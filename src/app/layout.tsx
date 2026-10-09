@@ -13,6 +13,7 @@ const khmer = Noto_Sans_Khmer({ subsets: ["khmer"], weight: ["400", "600"], vari
 export const metadata: Metadata = {
   title: { default: "Samesay", template: "%s · Samesay" },
   description: "Translate any video and keep it sounding like the original: each speaker in their own voice, every line on time, ready to post.",
+  icons: { icon: { url: "/favicon.svg", type: "image/svg+xml" } },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
