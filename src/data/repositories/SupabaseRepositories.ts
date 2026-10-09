@@ -12,7 +12,7 @@ const db = () => adminClient() as any;
 
 function toRow(j: Partial<TranslationJob>): Record<string, unknown> {
   const map: Record<string, string> = {
-    id: "id", userId: "user_id", kind: "kind", template: "template", name: "name", durationSec: "duration_sec", status: "status", progress: "progress",
+    id: "id", userId: "user_id", kind: "kind", template: "template", split: "split", name: "name", durationSec: "duration_sec", status: "status", progress: "progress",
     sourceLanguage: "source_language", targetLanguage: "target_language", voice: "voice", keepBackground: "keep_background",
     burnSubtitles: "burn_subtitles", blurSubtitles: "blur_subtitles", trimSec: "trim_sec", held: "held", used: "used",
     lines: "segments", speakers: "speakers", error: "error", files: "files", createdAt: "created_at", updatedAt: "updated_at",
@@ -24,7 +24,7 @@ function toRow(j: Partial<TranslationJob>): Record<string, unknown> {
 
 function fromRow(r: any): TranslationJob {
   return {
-    id: r.id, userId: r.user_id, kind: r.kind ?? "dub", template: r.template ?? null, name: r.name, durationSec: Number(r.duration_sec), status: r.status, progress: r.progress,
+    id: r.id, userId: r.user_id, kind: r.kind ?? "dub", template: r.template ?? null, split: r.split ?? null, name: r.name, durationSec: Number(r.duration_sec), status: r.status, progress: r.progress,
     sourceLanguage: r.source_language, targetLanguage: r.target_language, voice: r.voice, keepBackground: r.keep_background,
     burnSubtitles: r.burn_subtitles, blurSubtitles: r.blur_subtitles, trimSec: r.trim_sec == null ? null : Number(r.trim_sec),
     held: r.held, used: r.used, lines: r.segments, speakers: r.speakers, error: r.error, files: r.files ?? {},

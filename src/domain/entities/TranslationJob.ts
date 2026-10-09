@@ -1,5 +1,6 @@
 import type { VoiceKind } from "@/domain/billing/pricing";
 import type { RenderTemplate } from "@/domain/repositories/IMediaRepository";
+import type { SplitJob, SplitSettings } from "@/domain/split/Split";
 
 export type TranslationJobStatus =
   | "pending"
@@ -70,18 +71,26 @@ export interface TranslationJob {
   speakers: SpeakerInfo[] | null;
   error: string | null;
   template: JobTemplate | null;
+  /** settings and parts of an Auto-split job */
+  split: SplitJob | null;
   files: JobFiles;
   createdAt: Date;
   updatedAt: Date;
 }
 
 /** What the browser may see about a job. */
-export type PublicJob = Omit<TranslationJob, "files" | "userId" | "template"> & {
+export type PublicJob = Omit<TranslationJob, "files" | "userId" | "template" | "split"> & {
   hasVideo: boolean;
   template: { name: string; ratio: JobTemplate["ratio"] } | null;
+  split: (SplitSettings & { parts: { from: number; to: number; ready: boolean }[] }) | null;
 };
 
 export function toPublicJob(job: TranslationJob): PublicJob {
-  const { files, userId: _userId, template, ...rest } = job;
-  return { ...rest, hasVideo: Boolean(files.video), template: template ? { name: template.name, ratio: template.ratio } : null };
+  const { files, userId: _userId, template, split, ...rest } = job;
+  return {
+    ...rest,
+    hasVideo: Boolean(files.video),
+    template: template ? { name: template.name, ratio: template.ratio } : null,
+    split: split ? { ...split, parts: split.parts.map((p) => ({ from: p.from, to: p.to, ready: Boolean(p.file) })) } : null,
+  };
 }

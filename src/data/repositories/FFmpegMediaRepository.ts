@@ -21,6 +21,16 @@ function run(args: string[], cwd?: string): Promise<string> {
 }
 
 export class FFmpegMediaRepository implements IMediaRepository {
+  findPauses(videoPath: string) {
+    return findPausesIn(videoPath);
+  }
+
+  async cut(videoPath: string, from: number, to: number, outputPath: string): Promise<void> {
+    // A quick re-encode: copying can only start on a keyframe, which repeats seconds of the previous part.
+    await run(["-ss", from.toFixed(3), "-i", path.resolve(videoPath), "-t", (to - from).toFixed(3), "-map", "0:v:0", "-map", "0:a:0?",
+      "-c:v", "libx264", "-preset", "veryfast", "-crf", "21", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", path.resolve(outputPath)]);
+  }
+
   async probe(filePath: string): Promise<MediaInfo> {
     // ffmpeg -i always exits non-zero without an output; the info is on stderr.
     const out = await new Promise<string>((resolve) => {
@@ -64,11 +74,14 @@ export class FFmpegMediaRepository implements IMediaRepository {
     outputPath = path.resolve(outputPath);
     const workDir = path.dirname(outputPath);
     const info = await this.probe(videoPath);
-    const duration = Math.min(info.durationSec, options.trimSec ?? Infinity);
+    const start = Math.max(0, options.startSec ?? 0);
+    const duration = Math.min(Math.max(0, info.durationSec - start), options.trimSec ?? Infinity);
     const tpl = options.template;
-    const size = tpl ? frameSize(tpl.ratio, info.width || 1920, info.height || 1080) : { w: info.width || 1920, h: info.height || 1080 };
+    const crop = tpl && tpl.ratio !== "source" ? tpl.ratio : null;
+    const size = crop ? frameSize(crop, info.width || 1920, info.height || 1080) : { w: info.width || 1920, h: info.height || 1080 };
 
-    const inputs = ["-i", videoPath, "-i", audioPath];
+    const seek = start ? ["-ss", start.toFixed(3)] : [];
+    const inputs = [...seek, "-i", videoPath, ...seek, "-i", audioPath];
     const graph: string[] = [];
     let v = "[0:v]";
     const step = (filter: string) => { const out = `[v${graph.length}]`; graph.push(`${v}${filter}${out}`); v = out; };
@@ -78,7 +91,7 @@ export class FFmpegMediaRepository implements IMediaRepository {
       graph.push(`${v}split[bs1][bs2]`, "[bs1]crop=iw:ih*0.12:0:ih*0.60,boxblur=40[band]", "[bs2][band]overlay=0:H*0.60[vb]");
       v = "[vb]";
     }
-    if (tpl) {
+    if (tpl && crop) {
       const p = Math.max(0, Math.min(100, tpl.pan)) / 100;
       step(`scale=${size.w}:${size.h}:force_original_aspect_ratio=increase,crop=${size.w}:${size.h}:(in_w-${size.w})*${p}:(in_h-${size.h})*${p},setsar=1`);
     }
@@ -127,11 +140,24 @@ export class FFmpegMediaRepository implements IMediaRepository {
     }
 
     const trim = options.trimSec ? ["-t", String(options.trimSec)] : [];
+    // Cutting a part out needs exact frames, so re-encode even without any filter.
+    if (!graph.length && start) step("null");
     const video = graph.length
       ? ["-filter_complex", graph.join(";"), "-map", v, "-c:v", "libx264", "-preset", "fast", "-crf", "21", "-pix_fmt", "yuv420p"]
       : ["-map", "0:v:0", "-c:v", "copy"];
     await run([...inputs, ...trim, ...video, ...audioMap, "-c:a", "aac", "-b:a", "192k", "-t", String(duration.toFixed(3)), "-movflags", "+faststart", path.basename(outputPath)], workDir);
   }
+}
+
+export async function findPausesIn(videoPath: string): Promise<{ start: number; end: number }[]> {
+  const log = await run(["-i", path.resolve(videoPath), "-vn", "-af", "silencedetect=noise=-35dB:d=0.3", "-f", "null", "-"]).catch(() => "");
+  const pauses: { start: number; end: number }[] = [];
+  let open: number | null = null;
+  for (const m of Array.from(log.matchAll(/silence_(start|end): (-?[\d.]+)/g))) {
+    if (m[1] === "start") open = Math.max(0, +m[2]);
+    else if (open != null) { pauses.push({ start: open, end: +m[2] }); open = null; }
+  }
+  return pauses;
 }
 
 /**

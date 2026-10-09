@@ -13,6 +13,7 @@ export function StatusBadge({ job }: { job: Pick<PublicJob, "status" | "progress
 export function jobMeta(j: PublicJob) {
   const credits = `${isRunning(j) ? "held " + fmt(j.held) : fmt(j.used)} cr`;
   if (j.kind === "edit") return `Template · ${j.template?.name ?? ""} · ${j.template?.ratio ?? ""} · ${credits}`;
+  if (j.kind === "split") return `Split · ${j.split?.parts.length ?? 0} parts · ${credits}`;
   return `${code(j.sourceLanguage)} → ${code(j.targetLanguage)} · ${VOICE_INFO[j.voice].name} · ${isRunning(j) ? "held " + fmt(j.held) : fmt(j.used)} cr`;
 }
 

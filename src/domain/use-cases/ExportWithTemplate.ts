@@ -41,7 +41,7 @@ export class ExportWithTemplateUseCase {
       id: input.jobId, userId: input.userId, kind: "edit", name: input.name, durationSec: input.durationSec,
       status: "merging", progress: 10, sourceLanguage: null, targetLanguage: "", voice: "standard",
       keepBackground: false, burnSubtitles: false, blurSubtitles: false, trimSec: null,
-      held: cost, used: 0, lines: null, speakers: null, error: null, template: input.template,
+      held: cost, used: 0, lines: null, speakers: null, error: null, template: input.template, split: null,
       files: { dir: input.dir, original: input.sourceVideo }, createdAt: now, updatedAt: now,
     });
     return { ok: true, job };

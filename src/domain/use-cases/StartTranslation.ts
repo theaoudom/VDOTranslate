@@ -57,7 +57,7 @@ export class StartTranslationUseCase {
     try {
       const now = new Date();
       const job = await this.jobs.create({
-        id: input.jobId, userId: input.userId, kind: "dub", template: input.template, name: input.name, durationSec: est.sec, status: "pending", progress: 0,
+        id: input.jobId, userId: input.userId, kind: "dub", template: input.template, split: null, name: input.name, durationSec: est.sec, status: "pending", progress: 0,
         sourceLanguage: input.sourceLanguage, targetLanguage: input.targetLanguage, voice: input.voice,
         keepBackground: input.keepBackground, burnSubtitles: input.burnSubtitles, blurSubtitles: input.blurSubtitles,
         trimSec: trim, held: est.total, used: 0, lines: null, speakers: null, error: null,

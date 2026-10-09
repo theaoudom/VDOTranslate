@@ -8,6 +8,7 @@ import {
   LoaderCircle, OctagonAlert, Pause, Pencil, Play, RefreshCw, Rewind, Scissors, Volume2,
 } from "lucide-react";
 import type { PublicJob, TranscriptLine } from "@/domain/entities/TranslationJob";
+import { SPLIT_PRESETS } from "@/domain/split/Split";
 import { useToast } from "../Toast";
 import { isRunning, jobMeta, StatusBadge } from "./bits";
 import { fmt, mmss, relativeDay, tcode, VOICE_INFO } from "./format";
@@ -38,6 +39,7 @@ export function JobView({ initial }: { initial: PublicJob }) {
   if (job.status === "failed") return <FailedView job={job} />;
   if (isRunning(job) && !revoicing) return <ProcessingView job={job} />;
   if (job.kind === "edit") return <EditResultView job={job} />;
+  if (job.kind === "split") return <SplitResultView job={job} />;
   return <ResultView job={job} revoicing={revoicing} onRevoiceStarted={() => setJob({ ...job, status: "merging", progress: 90 })} />;
 }
 
@@ -45,7 +47,7 @@ function Head({ job, children }: { job: PublicJob; children?: React.ReactNode })
   return (
     <div className="page-head">
       <div>
-        <span className="eyebrow">{job.kind === "edit" ? "Edit" : "Translation"} · {relativeDay(new Date(job.createdAt))}</span>
+        <span className="eyebrow">{job.kind === "edit" ? "Edit" : job.kind === "split" ? "Auto-split" : "Translation"} · {relativeDay(new Date(job.createdAt))}</span>
         <h1 className="t-h2" style={{ marginTop: 4 }}>{job.name}</h1>
         <p className="sub">{jobMeta(job)}</p>
       </div>
@@ -56,7 +58,11 @@ function Head({ job, children }: { job: PublicJob; children?: React.ReactNode })
 
 /* ── processing ── */
 function ProcessingView({ job }: { job: PublicJob }) {
-  const steps: [string, string][] = job.kind === "edit" ? [
+  const sp = job.split;
+  const steps: [string, string][] = job.kind === "split" && sp ? [
+    ["extracting", sp.silence ? "Finding pauses" : "Measuring the video"],
+    ["merging", `Cutting ${sp.parts.length} parts` + (sp.reframe ? ", reframing to 9:16" : "") + (sp.label || job.template ? ", adding " + [sp.label && "labels", job.template && "the template"].filter(Boolean).join(" and ") : "")],
+  ] : job.kind === "edit" ? [
     ["merging", `Placing ${job.template?.name ? "“" + job.template.name + "”" : "the template"}${job.template && job.template.ratio !== "16:9" ? ", cropping to " + job.template.ratio : ""} and rendering the video`],
   ] : [
     ["extracting", "Extracting audio"],
@@ -89,7 +95,7 @@ function ProcessingView({ job }: { job: PublicJob }) {
         <div className="panel">
           <div className="panel-head"><h3>Credits</h3></div>
           <div className="panel-body stack">
-            {job.kind === "edit" ? (
+            {job.kind === "edit" || job.kind === "split" ? (
               <table className="cost"><tbody><tr className="total"><td>Fixed price</td><td>{fmt(job.held)} cr</td></tr></tbody></table>
             ) : (
               <>
@@ -133,7 +139,7 @@ function FailedView({ job }: { job: PublicJob }) {
               <tr className="total"><td>Charged</td><td>0 cr</td></tr>
             </tbody></table>
             <div className="note ok"><CircleCheck /><div>All held credits came back to your balance.</div></div>
-            <Link className="btn primary block" href="/app/new"><RefreshCw />Try again</Link>
+            <Link className="btn primary block" href={job.kind === "split" ? "/app/split" : "/app/new"}><RefreshCw />Try again</Link>
           </div>
         </div>
       </div>
@@ -207,7 +213,7 @@ function ResultView({ job, revoicing, onRevoiceStarted }: { job: PublicJob; revo
       <Head job={job}>
         <div className="hstack">
           <Link className="btn" href={`/app/templates?video=${job.id}`}><LayoutTemplate />Add a template</Link>
-          <Link className="btn" href="/app/split"><Scissors />Split into parts</Link>
+          <Link className="btn" href={`/app/split?video=${job.id}`}><Scissors />Split into parts</Link>
           {job.hasVideo && <div className="menu-anchor" ref={menuRef}>
             <button className="btn primary" onClick={() => setMenu((m) => !m)} aria-haspopup="menu" aria-expanded={menu}><Download />Download<ChevronDown /></button>
             <div className="menu" role="menu" hidden={!menu}>
@@ -326,7 +332,7 @@ function EditResultView({ job }: { job: PublicJob }) {
       <Head job={job}>
         <div className="hstack">
           <Link className="btn" href={`/app/templates?video=${job.id}`}><LayoutTemplate />Edit template</Link>
-          <Link className="btn" href="/app/split"><Scissors />Split into parts</Link>
+          <Link className="btn" href={`/app/split?video=${job.id}`}><Scissors />Split into parts</Link>
           {job.hasVideo && <a className="btn primary" href={`${base}/video?download=1`}><Download />Download MP4</a>}
         </div>
       </Head>
@@ -348,6 +354,44 @@ function EditResultView({ job }: { job: PublicJob }) {
             </tbody></table>
           </div>
         </div>
+      </div>
+    </section>
+  );
+}
+
+/* ── result of Auto-split ── */
+function SplitResultView({ job }: { job: PublicJob }) {
+  const sp = job.split!;
+  const n = sp.parts.length;
+  const base = `/api/jobs/${job.id}/parts`;
+  const ready = sp.parts.every((p) => p.ready);
+  return (
+    <section>
+      <Head job={job}>
+        <div className="hstack">
+          <Link className="btn" href="/app/split"><Scissors />Split again</Link>
+          {ready && <a className="btn primary" href={`${base}/zip`}><Download />Download all (.zip)</a>}
+        </div>
+      </Head>
+      {ready ? (
+        <div className="note ok" style={{ marginBottom: "var(--sp-4)" }}><CircleCheck /><div><b>{n} parts are ready</b> for {SPLIT_PRESETS[sp.preset].name}{sp.reframe ? ", reframed to 9:16" : ""}{sp.label ? ", with part labels" : ""}{job.template ? ", with “" + job.template.name + "”" : ""}. Charged {fmt(job.used)} cr.</div></div>
+      ) : (
+        <div className="note" style={{ marginBottom: "var(--sp-4)" }}><Info /><div><b>The video files were deleted.</b> Files are kept for 30 days.</div></div>
+      )}
+      <div className="parts">
+        {sp.parts.map((p, i) => (
+          <div key={i} className="panel part">
+            <div className="pv">
+              {p.ready && <video src={`${base}/${i + 1}#t=0.5`} preload="metadata" muted playsInline style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />}
+              {sp.label && <span className="badge tag">Part {i + 1}/{n}</span>}
+              <span className="dur">{mmss(p.to - p.from)}</span>
+            </div>
+            <div className="pb">
+              <span className="num t-xs muted">{mmss(p.from)}–{mmss(p.to)}</span>
+              {p.ready && <a className="btn ghost icon sm" href={`${base}/${i + 1}?download=1`} aria-label={`Download part ${i + 1}`}><Download /></a>}
+            </div>
+          </div>
+        ))}
       </div>
     </section>
   );

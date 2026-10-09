@@ -83,6 +83,39 @@ async function exportStep(jobId: string) {
   return buildContainer().exportWithTemplate.run(jobId);
 }
 
+/** Parts made per step: plain cuts are quicker than reframed / labelled parts. */
+const PARTS_PER_STEP = { copy: 6, encode: 3 };
+
+async function planSplit(jobId: string) {
+  "use step";
+  return buildContainer().splitVideo.plan(jobId);
+}
+async function makeParts(jobId: string, from: number, to: number) {
+  "use step";
+  return buildContainer().splitVideo.makeParts(jobId, from, to);
+}
+async function finishSplit(jobId: string) {
+  "use step";
+  return buildContainer().splitVideo.finish(jobId);
+}
+async function failSplit(jobId: string) {
+  "use step";
+  return buildContainer().splitVideo.fail(jobId);
+}
+
+/** Cut a video into parts for social media, then charge its fixed price. */
+export async function splitVideo(jobId: string) {
+  "use workflow";
+  try {
+    const { parts, encode } = await planSplit(jobId);
+    const batch = encode ? PARTS_PER_STEP.encode : PARTS_PER_STEP.copy;
+    for (let from = 0; from < parts; from += batch) await makeParts(jobId, from, Math.min(parts, from + batch));
+    await finishSplit(jobId);
+  } catch {
+    await failSplit(jobId);
+  }
+}
+
 /** Apply a template to a video. */
 export async function exportVideo(jobId: string) {
   "use workflow";
