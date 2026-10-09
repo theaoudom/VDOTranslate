@@ -10,7 +10,7 @@ import { getCurrentUser } from "@/lib/supabase/server";
 import { JobRow } from "@/presentation/samesay/app/bits";
 import { fmt } from "@/presentation/samesay/app/format";
 import { StartCard } from "@/presentation/samesay/app/StartCard";
-import { BillingSoonLink } from "@/presentation/samesay/app/BillingSoonLink";
+import { BillingLink } from "@/presentation/samesay/app/Settings";
 
 export const metadata: Metadata = { title: "Home" };
 
@@ -29,13 +29,13 @@ export default async function HomePage() {
         <div>
           <span className="eyebrow">{now.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}</span>
           <h1 className="t-h2" style={{ marginTop: 4 }}>{hr < 12 ? "Good morning" : hr < 18 ? "Good afternoon" : "Good evening"}, {account.firstName}</h1>
-          <p className="sub">You have <b style={{ color: "var(--text)" }}>{fmt(account.credits)} credits</b> · <BillingSoonLink>Top up</BillingSoonLink></p>
+          <p className="sub">You have <b style={{ color: "var(--text)" }}>{fmt(account.credits)} credits</b> · <BillingLink>Top up</BillingLink></p>
         </div>
       </div>
       {account.ready && account.credits < 100 && (
         <div className="note accent" style={{ marginBottom: "var(--sp-4)" }}>
           <Coins />
-          <div><b>You have {fmt(account.credits)} credits left</b>, enough for about {Math.max(0, Math.floor(account.credits / stdPerMin))} min with standard voices. <BillingSoonLink>Top up or upgrade</BillingSoonLink></div>
+          <div><b>You have {fmt(account.credits)} credits left</b>, enough for about {Math.max(0, Math.floor(account.credits / stdPerMin))} min with standard voices. <BillingLink>Top up or upgrade</BillingLink></div>
         </div>
       )}
       <StartCard plan={account.plan} voiceLanguages={c.ai.voiceLanguages()} />

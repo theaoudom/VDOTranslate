@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useOpenSettings } from "./Settings";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ArrowUpCircle, ChevronDown, Coins, Mic, OctagonAlert, ReceiptText, RefreshCw, Scissors, SlidersHorizontal, Sparkles } from "lucide-react";
@@ -17,7 +18,7 @@ export interface TranslateFormProps {
   credits: number;
   ready: boolean;
   available: { voiceLanguages: VoiceLanguages; background: boolean };
-  initial: { to?: string; voice?: VoiceKind };
+  initial: { to?: string; voice?: VoiceKind; bg?: boolean; subs?: boolean };
   templates: { id: string; name: string; ratio: string }[];
 }
 
@@ -32,8 +33,8 @@ export function TranslateForm({ upload, plan, credits, ready, available, initial
   const [voice, setVoice] = useState<VoiceKind>(voiceOk(initial.voice) ? initial.voice! : defaultVoice(plan, voices));
   // switching to a language these voices can't speak falls back to the standard voice
   useEffect(() => { if (!voicesFor(available.voiceLanguages, to)[voice]) setVoice("standard"); }, [to, voice, available.voiceLanguages]);
-  const [bg, setBg] = useState(available.background);
-  const [subs, setSubs] = useState(true);
+  const [bg, setBg] = useState(available.background && initial.bg !== false);
+  const [subs, setSubs] = useState(initial.subs ?? true);
   const [blur, setBlur] = useState(false);
   const [trim, setTrim] = useState<number | null>(null);
   const [templateId, setTemplateId] = useState("");
@@ -43,7 +44,8 @@ export function TranslateForm({ upload, plan, credits, ready, available, initial
   const e = estimateDub(upload.durationSec, opts, plan, trim);
   const short = e.total > credits;
   const blocked = e.overLength || short || !ready;
-  const billingSoon = () => toast("Top-ups and plans are coming in the next update");
+  const openSettings = useOpenSettings();
+  const openBilling = () => openSettings("billing");
 
   async function start() {
     setStarting(true);
@@ -66,7 +68,7 @@ export function TranslateForm({ upload, plan, credits, ready, available, initial
         <div className="note rec"><OctagonAlert /><div><b>Too long for the {p.name} plan.</b> It handles videos up to {p.maxMin} min, and this one is {mmss(upload.durationSec)}.</div></div>
         <div className="stack" style={{ gap: 6 }}>
           <button className="btn block" onClick={() => setTrim(p.maxMin * 60)}><Scissors />Translate the first {p.maxMin}:00</button>
-          <button className="btn block" onClick={billingSoon}><ArrowUpCircle />Upgrade plan</button>
+          <button className="btn block" onClick={openBilling}><ArrowUpCircle />Upgrade plan</button>
         </div>
       </>
     );
@@ -79,7 +81,7 @@ export function TranslateForm({ upload, plan, credits, ready, available, initial
         <div className="stack" style={{ gap: 6 }}>
           {alt && alt.total <= credits && <button className="btn block" onClick={() => { setVoice("standard"); toast("Switched to standard voices"); }}><Mic />Use standard voice · {fmt(alt.total)} cr</button>}
           {fit >= 30 && <button className="btn block" onClick={() => { setTrim(fit); toast(`Only the first ${mmss(fit)} will be translated`); }}><Scissors />Translate the first {mmss(fit)}</button>}
-          <button className="btn block" onClick={billingSoon}><Coins />Top up credits</button>
+          <button className="btn block" onClick={openBilling}><Coins />Top up credits</button>
         </div>
       </>
     );
@@ -123,7 +125,7 @@ export function TranslateForm({ upload, plan, credits, ready, available, initial
                     );
                   })}
                 </div>
-                {!p.clone && voices.cloned && <span className="hint">Their own voice comes with Creator and Studio. <a href="#" onClick={(ev) => { ev.preventDefault(); billingSoon(); }}>Compare plans</a></span>}
+                {!p.clone && voices.cloned && <span className="hint">Their own voice comes with Creator and Studio. <a href="#" onClick={(ev) => { ev.preventDefault(); openBilling(); }}>Compare plans</a></span>}
                 {voiceHint(available.voiceLanguages, to) && <span className="hint">{voiceHint(available.voiceLanguages, to)}</span>}
               </div>
               <div className="field">

@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- prototype: app · status: confirmed 2026-10-05 · built 2026-10-07 (landing, pricing, log in, sign up, home, translate, processing, result, my videos, templates editor) · screens: landing, pricing, login, signup, home, new translation (upload → settings → estimate), processing, job result (dub / split / edit / failed), editor, auto-split, my videos, settings dialog (account / billing & credits / translation defaults / security) -->
+<!-- prototype: app · status: confirmed 2026-10-05 · built 2026-10-07 (landing, pricing, log in, sign up, home, translate, processing, result, my videos, templates editor) · revised 2026-10-09: manual payment (KHQR / bank transfer, approved in Telegram) replaces card checkout — confirmed 2026-10-09 · screens: landing, pricing, login, signup, home, new translation (upload → settings → estimate), processing, job result (dub / split / edit / failed), editor, auto-split, my videos, settings dialog (account / billing & credits / translation defaults / security) -->
 <html lang="en" data-theme="light">
 <head>
 <meta charset="utf-8">
@@ -830,7 +830,7 @@ function SAMPLE_HISTORY(){return [
 
 /* ───────────── state ───────────── */
 var S;
-function stateCreator(){return {auth:true,user:{name:'Sokha Rith',email:'sokha@studio.com'},plan:'creator',credits:1240,held:0,renew:'Oct 28',jobs:SAMPLE_JOBS(),history:SAMPLE_HISTORY(),video:null,step:'upload',
+function stateCreator(){return {auth:true,user:{name:'Sokha Rith',email:'sokha@studio.com'},plan:'creator',credits:1240,held:0,renew:'Oct 28',pending:[],jobs:SAMPLE_JOBS(),history:SAMPLE_HISTORY(),video:null,step:'upload',
   dub:{from:'auto',to:'km',voice:'cloned',bg:true,subs:true,blur:false,trim:null,tpl:null},
   split:{preset:'tiktok',mode:'length',len:60,count:10,silence:true,reframe:true,label:true,tpl:null},
   edit:{x:82,y:4,w:14,op:90,margin:4,logo:null,ratio:'16:9',range:'all',from:0,to:30},
@@ -1037,7 +1037,8 @@ R.pricing=function(el){
       ['Why do I see a price before every job?','The cost depends on the video length and the voice you choose. We show the estimate first, and the job only starts if you have enough credits.'],
       ['What happens to unused credits from a job?','We hold the estimate plus a 10% buffer while the job runs. When it finishes we charge only what it used and return the rest right away.'],
       ['What if a job fails?','You get all of the held credits back.'],
-      ['Do credits expire?','Monthly plan credits reset on your renewal date. Credits you buy as a top-up never expire.'],
+      ['Do credits expire?','No. Credits from a plan month and from top-ups stay until you use them.'],
+      ['How do I pay?','Scan the KHQR code with any Cambodian bank app, or send a bank transfer with your payment note. We confirm it and add your credits, usually within an hour.'],
       ['Can I cancel?','Yes, any time. Your plan stays active until the end of the month you paid for.']
     ].map(function(q){return '<details><summary>'+q[0]+ic('plus')+'</summary><p>'+q[1]+'</p></details>'}).join('')+'</div></div>';
 };
@@ -1097,6 +1098,34 @@ R.dashboard=function(el){
   $$('[data-qv]',el).forEach(function(b){b.addEventListener('click',function(){S.dub.voice=b.dataset.qv;$$('[data-qv]',el).forEach(function(x){x.setAttribute('aria-pressed',String(x===b))});$('#q-price',el).textContent='About '+fmt(perMin())+' cr per minute of video. You’ll see the exact price before it starts.'})});
 };
 
+/* ── Paying: KHQR / bank transfer, confirmed by the team in Telegram ── */
+var PAY={bank:'ABA Bank',name:'SAMESAY',account:'000 123 456'};
+function payRef(){return 'SS-'+Math.random().toString(36).slice(2,6).toUpperCase()}
+function qrSvg(seed){var n=25,c='',r=seed;function rnd(){r=(r*9301+49297)%233280;return r/233280}
+  function finder(x,y){return '<rect x="'+x+'" y="'+y+'" width="7" height="7" fill="#000"/><rect x="'+(x+1)+'" y="'+(y+1)+'" width="5" height="5" fill="#fff"/><rect x="'+(x+2)+'" y="'+(y+2)+'" width="3" height="3" fill="#000"/>'}
+  for(var y=0;y<n;y++)for(var x=0;x<n;x++){var inF=(x<8&&y<8)||(x>n-9&&y<8)||(x<8&&y>n-9);if(!inF&&rnd()>.52)c+='<rect x="'+x+'" y="'+y+'" width="1" height="1" fill="#000"/>'}
+  return '<svg viewBox="-2 -2 '+(n+4)+' '+(n+4)+'" width="148" height="148" shape-rendering="crispEdges" role="img" aria-label="KHQR code"><rect x="-2" y="-2" width="'+(n+4)+'" height="'+(n+4)+'" fill="#fff"/>'+c+finder(0,0)+finder(n-7,0)+finder(0,n-7)+'</svg>'}
+/* item: {label, sub, cr, price, plan?} */
+function payModal(item){var ref=payRef();
+  openModal({title:'Pay $'+item.price+' · '+item.label,ok:'I’ve paid',
+    body:'<div class="stack">'+
+      '<table class="cost"><tr><td>'+item.label+'<span class="sub">'+item.sub+'</span></td><td>$'+item.price+'.00</td></tr></table>'+
+      '<div class="hstack" style="gap:var(--sp-4);align-items:center;flex-wrap:wrap">'+
+        '<div style="border:1px solid var(--line);border-radius:var(--r-md);padding:8px;background:#fff;line-height:0">'+qrSvg(item.price*7+item.cr)+'</div>'+
+        '<div class="stack" style="gap:6px;min-width:200px;flex:1">'+
+          '<b class="t-small">Scan with any bank app (KHQR)</b>'+
+          '<span class="muted t-small">or send to '+PAY.bank+' · '+PAY.name+' · <span class="num">'+PAY.account+'</span></span>'+
+          '<div class="panel panel-body hstack" style="box-shadow:none;padding:8px 10px;justify-content:space-between;gap:8px"><div><div class="faint t-xs">Payment note</div><div class="num" style="font-size:var(--fs-lg);font-weight:600;letter-spacing:.04em">'+ref+'</div></div><button class="btn sm" data-act="copy" data-text="'+ref+'">'+ic('copy')+'Copy</button></div>'+
+        '</div></div>'+
+      '<p class="faint t-xs">Send exactly $'+item.price+'.00 and write the note so we can find your payment. We check it and add your credits, usually within an hour. You’ll see them here. <i>(Prototype: confirmed automatically after a few seconds.)</i></p>'+
+    '</div>',
+    onOk:function(){var pend={ref:ref,label:item.label,price:item.price,cr:item.cr,plan:item.plan||null,at:nowStamp()};S.pending.unshift(pend);rerender();if(!$('#settings').hidden)renderSettings();
+      toast('Thanks! We’re checking your payment');
+      setTimeout(function(){var i=S.pending.indexOf(pend);if(i<0)return;S.pending.splice(i,1);
+        if(pend.plan){S.plan=pend.plan;S.renew='Nov 08'}
+        S.credits+=pend.cr;S.history.unshift({d:nowStamp(),a:(pend.plan?'Plan · '+PLANS[pend.plan].name:'Top-up · '+fmt(pend.cr)+' cr')+' · paid $'+pend.price,j:pend.ref,v:pend.cr});
+        rerender();if(!$('#settings').hidden)renderSettings();toast('Payment confirmed · '+fmt(pend.cr)+' credits added')},7000)}})}
+
 /* ── Settings dialog (opened from the profile) ── */
 var STABS=[['account','user','Account'],['billing','credit-card','Billing & credits'],['defaults','languages','Translation defaults'],['security','shield','Security']];
 function openSettings(tab){S.stab=tab||'account';S.delConfirm=false;closeMenus();$('#settings').hidden=false;renderSettings();$('#settings .modal').focus()}
@@ -1114,13 +1143,14 @@ function renderSettings(){
   }
   if(t==='billing'){
     var cap=Math.max(p.monthly,S.credits+S.held);
-    body='<div class="panel panel-body meter" style="box-shadow:none"><div class="meter-row"><span class="num" style="font-size:var(--fs-2xl);letter-spacing:-.03em">'+fmt(S.credits)+' <span class="faint" style="font-size:var(--fs-md)">cr available</span></span><span class="faint t-xs">'+(p.once?'Free credits':'Renews '+S.renew)+'</span></div>'+
+    body='<div class="panel panel-body meter" style="box-shadow:none"><div class="meter-row"><span class="num" style="font-size:var(--fs-2xl);letter-spacing:-.03em">'+fmt(S.credits)+' <span class="faint" style="font-size:var(--fs-md)">cr available</span></span><span class="faint t-xs">'+(p.once?'Free credits':'Active until '+S.renew)+'</span></div>'+
         '<div class="meter-bar" style="height:8px"><span style="width:'+(S.credits/cap*100)+'%"></span><span class="reserve" style="width:'+(S.held/cap*100)+'%"></span></div>'+
         '<div class="hstack t-xs muted" style="gap:var(--sp-4)"><span>Available '+fmt(S.credits)+'</span><span>Held for running jobs '+fmt(S.held)+'</span></div></div>'+
+      ((S.pending||[]).length?'<div class="panel rows" style="box-shadow:none">'+S.pending.map(function(x){return '<div class="row"><span class="ic-box" style="margin:0">'+ic('hourglass')+'</span><div class="main"><div class="title">Checking your payment · '+x.label+'</div><div class="meta"><span class="num">$'+x.price+'.00</span> · note <span class="num">'+x.ref+'</span> · sent '+x.at+'</div></div><button class="linkbtn" style="color:var(--text-3)" data-act="cancel-pay" data-ref="'+x.ref+'">Cancel</button></div>'}).join('')+'</div>':'')+
       '<div><h4 class="t-h4" style="margin-bottom:var(--sp-2)">Top up</h4><div class="grid g-3">'+PACKS.map(function(k,i){return '<div class="panel panel-body stack" style="gap:4px;box-shadow:none"><span class="num" style="font-size:var(--fs-lg)">'+fmt(k.cr)+' cr</span><span class="faint t-xs">never expire</span><button class="btn'+(i===1?' primary':'')+' sm" style="margin-top:6px" data-act="buy" data-i="'+i+'">Buy · $'+k.price+'</button></div>'}).join('')+'</div></div>'+
-      '<div><h4 class="t-h4" style="margin-bottom:var(--sp-2)">Plan</h4><div class="panel rows" style="box-shadow:none">'+['free','creator','studio'].map(function(id){var q=PLANS[id],cur=S.plan===id;var btn=cur?'<span class="badge accent">Current</span>':id==='free'?'<span class="faint t-xs">once per account</span>':'<button class="btn sm'+(q.price>p.price?' primary':'')+'" data-act="switch-plan" data-plan="'+id+'">'+(q.price>p.price?'Upgrade':'Switch')+'</button>';
+      '<div><h4 class="t-h4" style="margin-bottom:var(--sp-2)">Plan</h4><div class="panel rows" style="box-shadow:none">'+['free','creator','studio'].map(function(id){var q=PLANS[id],cur=S.plan===id;var btn=cur&&id!=='free'?'<span class="hstack" style="gap:8px"><span class="badge accent">Current</span><button class="btn sm" data-act="switch-plan" data-plan="'+id+'">Renew</button></span>':cur?'<span class="badge accent">Current</span>':id==='free'?'<span class="faint t-xs">once per account</span>':'<button class="btn sm'+(q.price>p.price?' primary':'')+'" data-act="switch-plan" data-plan="'+id+'">'+(q.price>p.price?'Upgrade':'Switch')+'</button>';
         return '<div class="row"><div class="main"><div class="title">'+q.name+' <span class="faint num t-xs" style="font-weight:400">$'+q.price+(q.once?'':' / month')+'</span></div><div class="meta">'+(q.once?'60 cr once':fmt(q.monthly)+' cr / month')+' · up to '+(q.maxMin>=60?q.maxMin/60+' h':q.maxMin+' min')+' · '+q.res+(q.clone?' · own-voice cloning':'')+'</div></div>'+btn+'</div>'}).join('')+'</div>'+
-        (S.plan!=='free'?'<button class="linkbtn" style="margin-top:8px;color:var(--text-3)" data-act="cancel-plan">Cancel plan</button>':'')+'</div>'+
+        '<p class="faint t-xs" style="margin-top:8px">Plans are paid one month at a time and never charge you automatically. Renew whenever you like; the month starts from today.</p></div>'+
       '<div><h4 class="t-h4" style="margin-bottom:var(--sp-2)">History</h4><div class="panel table-wrap" style="box-shadow:none"><table class="table"><thead><tr><th>Date</th><th>Activity</th><th class="r">Credits</th></tr></thead><tbody>'+
         S.history.slice(0,8).map(function(h){return '<tr><td class="num faint">'+h.d+'</td><td>'+esc(h.a)+(h.j?'<div class="faint t-xs">'+esc(h.j)+'</div>':'')+'</td><td class="r num"'+(h.v>0?' style="color:var(--ok)"':'')+'>'+(h.v>0?'+':'−')+fmt(Math.abs(h.v))+'</td></tr>'}).join('')+'</tbody></table></div></div>'+
       '<details class="faq"><summary>How credits are counted'+ic('plus')+'</summary><div class="panel" style="margin-top:var(--sp-3);box-shadow:none">'+ratesTable()+'</div><p>Rates follow what each AI step really costs. Translations hold the estimate plus 10% and return what isn’t used. Edits and splits have a fixed price.</p></details>';
@@ -1513,12 +1543,10 @@ document.addEventListener('click',function(e){
       body:'<div class="stack">'+costTable(est.lines,est.total,{label:'Fixed price'})+meterAfter(est.total)+(est.short?'<div class="note rec">'+ic('octagon-alert')+'<div><b>Not enough credits.</b> <a href="#" data-act="settings" data-tab="billing">Top up</a> to export.</div></div>':'')+'</div>',onOk:startExport});break;
     case 'retry':var rj=job(a.dataset.id);S.useSample=true;S.video=null;S.dub.from=rj.from;S.dub.to=rj.to;S.dub.voice=rj.voice;S.step='settings';go('#/app/new');break;
     case 'scroll':document.getElementById(a.dataset.to).scrollIntoView({behavior:'smooth'});break;
-    case 'buy':var k=PACKS[+a.dataset.i];openModal({title:'Buy '+fmt(k.cr)+' credits',ok:'Pay $'+k.price,body:'<div class="stack"><table class="cost"><tr><td>'+fmt(k.cr)+' credits<span class="sub">never expire</span></td><td>$'+k.price+'.00</td></tr><tr class="total"><td>Balance after</td><td>'+fmt(S.credits+k.cr)+' cr</td></tr></table><p class="faint t-xs">You’ll pay on the secure checkout page. In this prototype the credits are added right away.</p></div>',
-      onOk:function(){S.credits+=k.cr;S.history.unshift({d:nowStamp(),a:'Top-up · '+fmt(k.cr)+' cr',j:'',v:k.cr});rerender();toast(fmt(k.cr)+' credits added')}});break;
-    case 'switch-plan':var np=PLANS[a.dataset.plan],up=np.price>plan().price;openModal({title:(up?'Upgrade to ':'Switch to ')+np.name+'?',ok:up?'Pay $'+np.price+' and upgrade':'Switch plan',
-      body:'<p>'+(up?'You’ll pay <b style="color:var(--text)">$'+np.price+' / month</b> from today, and <b style="color:var(--text)">'+fmt(np.monthly)+' credits</b> are added now. Your current credits stay.':'Your plan changes on '+(S.renew||'your next renewal')+'. You keep your current plan and credits until then.')+'</p>',
-      onOk:function(){if(up){S.plan=np.id;S.credits+=np.monthly;S.renew='Nov 05';S.history.unshift({d:nowStamp(),a:'Monthly credits · '+np.name,j:'',v:np.monthly});toast('You’re on '+np.name+'. '+fmt(np.monthly)+' credits added.')}else toast('Your plan switches to '+np.name+' on '+S.renew);rerender()}});break;
-    case 'cancel-plan':openModal({title:'Cancel your plan?',ok:'Cancel plan',danger:true,body:'<p>You keep '+plan().name+' and your credits until <b style="color:var(--text)">'+S.renew+'</b>. After that you won’t get new monthly credits. Top-up credits never expire.</p>',onOk:function(){toast('Plan cancelled. It stays active until '+S.renew)}});break;
+    case 'buy':var k=PACKS[+a.dataset.i];payModal({label:fmt(k.cr)+' credits',sub:'never expire',cr:k.cr,price:k.price});break;
+    case 'switch-plan':var np=PLANS[a.dataset.plan];payModal({label:np.name+' plan · 1 month',sub:fmt(np.monthly)+' credits added · '+np.res+(np.clone?' · own-voice cloning':''),cr:np.monthly,price:np.price,plan:np.id});break;
+    case 'cancel-pay':S.pending=S.pending.filter(function(x){return x.ref!==a.dataset.ref});renderSettings();toast('Payment request cancelled');break;
+    case 'copy':try{navigator.clipboard.writeText(a.dataset.text)}catch(err){}toast('Copied '+a.dataset.text);break;
     case 'settings':e.preventDefault();openSettings(a.dataset.tab);break;
     case 'stab':S.stab=a.dataset.tab;S.delConfirm=false;renderSettings();break;
     case 'close-settings':closeSettings();break;

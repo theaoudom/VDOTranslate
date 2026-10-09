@@ -7,8 +7,8 @@ import { Coins, CreditCard, FolderOpen, Globe, Languages, LayoutDashboard, Layou
 import { PLANS, type PlanId } from "@/domain/billing/pricing";
 import { BrandMark } from "../BrandMark";
 import { toggleTheme } from "../ThemeToggle";
-import { useToast } from "../Toast";
 import { fmt } from "./format";
+import { SettingsProvider, useOpenSettings } from "./Settings";
 
 export interface ShellAccount {
   name: string;
@@ -39,10 +39,14 @@ function section(path: string) {
   return { key: "", crumb: "" };
 }
 
-export function AppShell({ account, children }: { account: ShellAccount; children: ReactNode }) {
+export function AppShell(props: { account: ShellAccount; children: ReactNode }) {
+  return <SettingsProvider><Shell {...props} /></SettingsProvider>;
+}
+
+function Shell({ account, children }: { account: ShellAccount; children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const toast = useToast();
+  const openSettings = useOpenSettings();
   const [drawer, setDrawer] = useState(false);
   const [menu, setMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -50,7 +54,7 @@ export function AppShell({ account, children }: { account: ShellAccount; childre
   const plan = PLANS[account.plan];
   const cap = Math.max(plan.monthly, account.credits + account.held, 1);
   const initials = account.name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
-  const soon = () => { setMenu(false); toast("Settings and billing are coming in the next update"); };
+  const settings = (tab: "account" | "billing") => { setMenu(false); openSettings(tab); };
 
   useEffect(() => setDrawer(false), [pathname]);
   useEffect(() => {
@@ -76,7 +80,7 @@ export function AppShell({ account, children }: { account: ShellAccount; childre
             <Link key={n.key} href={n.href} aria-current={key === n.key ? "page" : undefined}><n.icon />{n.label}</Link>
           ))}
         </nav>
-        <button className="foot meter" onClick={soon}>
+        <button className="foot meter" onClick={() => settings("billing")}>
           <span className="meter-row"><span className="eyebrow">{plan.name}</span><span className="num t-small">{fmt(account.credits)}</span></span>
           <span className="meter-bar">
             <span style={{ width: (account.credits / cap) * 100 + "%" }} />
@@ -89,14 +93,14 @@ export function AppShell({ account, children }: { account: ShellAccount; childre
         <button className="btn ghost icon sm mobile-only" onClick={() => setDrawer((d) => !d)} aria-label="Menu"><Menu /></button>
         <div className="crumbs"><b>{crumb}</b></div>
         <span className="spacer" />
-        <button className="credit-pill" onClick={soon} aria-label="Credits and billing"><Coins /><span>{fmt(account.credits)} cr</span></button>
+        <button className="credit-pill" onClick={() => settings("billing")} aria-label="Credits and billing"><Coins /><span>{fmt(account.credits)} cr</span></button>
         <div className="menu-anchor" ref={menuRef}>
           <button className="avatar" onClick={() => setMenu((m) => !m)} aria-haspopup="menu" aria-expanded={menu} aria-label="Account">{initials}</button>
           <div className="menu" role="menu" hidden={!menu}>
             <div className="lbl"><div style={{ fontWeight: 600, fontSize: "var(--fs-sm)" }}>{account.name}</div><div className="faint t-xs">{account.email}</div></div>
             <hr />
-            <button role="menuitem" onClick={soon}><Settings />Settings</button>
-            <button role="menuitem" onClick={soon}><CreditCard />Billing &amp; credits</button>
+            <button role="menuitem" onClick={() => settings("account")}><Settings />Settings</button>
+            <button role="menuitem" onClick={() => settings("billing")}><CreditCard />Billing &amp; credits</button>
             <button role="menuitem" onClick={() => { toggleTheme(); setMenu(false); }}><SunMoon />Switch theme</button>
             <button role="menuitem" onClick={() => { setMenu(false); router.push("/"); }}><Globe />View website</button>
             <hr />

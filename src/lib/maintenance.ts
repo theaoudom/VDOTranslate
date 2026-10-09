@@ -1,5 +1,7 @@
 import { SupabaseCreditRepository, SupabaseJobRepository } from "@/data/repositories/SupabaseRepositories";
 import { RecoverStuckJobsUseCase } from "@/domain/use-cases/RecoverStuckJobs";
+import { SupabasePaymentRepository } from "@/data/repositories/SupabasePaymentRepository";
+import { adminClient } from "./supabase/admin";
 import { fileStore } from "./uploads";
 
 export const FILE_RETENTION_DAYS = 30;
@@ -11,6 +13,13 @@ const UUID = /^[0-9a-f-]{36}$/i;
  * after restarts and update the job at every step, so only a job that hasn't moved
  * for a long time is treated as stuck.
  */
+/** Ends paid plans whose month is over, and forgets pay windows nobody finished. */
+export async function tidyBilling() {
+  const { error } = await adminClient().rpc("expire_plans");
+  if (error) throw new Error(error.message);
+  await new SupabasePaymentRepository().deleteOpenBefore(new Date(Date.now() - 86400_000));
+}
+
 export async function recoverStuckJobs() {
   const recover = new RecoverStuckJobsUseCase(new SupabaseJobRepository(), new SupabaseCreditRepository());
   const n = await recover.execute({ isActive: () => false, staleMinutes: 45, hardLimitMinutes: 240 });

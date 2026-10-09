@@ -8,7 +8,7 @@ const nextConfig = {
     serverComponentsExternalPackages: ["fluent-ffmpeg", "@ffmpeg-installer/ffmpeg", "ffmpeg-static", "formidable"],
     // ffmpeg and the subtitle fonts are read from disk at run time, so ship them with the functions
     outputFileTracingIncludes: {
-      "/**/*": ["./node_modules/ffmpeg-static/ffmpeg", "./node_modules/ffmpeg-static/ffmpeg.exe", "./assets/fonts/**/*"],
+      "/**/*": ["./node_modules/ffmpeg-static/ffmpeg", "./node_modules/ffmpeg-static/ffmpeg.exe", "./assets/**/*"],
     },
   },
 };

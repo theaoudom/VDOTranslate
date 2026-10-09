@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { cleanupFiles, recoverStuckJobs } from "@/lib/maintenance";
+import { cleanupFiles, recoverStuckJobs, tidyBilling } from "@/lib/maintenance";
 
 export const maxDuration = 300;
 
@@ -9,5 +9,6 @@ export async function GET(req: NextRequest) {
   if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   await recoverStuckJobs();
   await cleanupFiles();
+  await tidyBilling();
   return NextResponse.json({ ok: true });
 }

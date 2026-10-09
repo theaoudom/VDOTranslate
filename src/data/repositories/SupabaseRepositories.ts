@@ -79,7 +79,10 @@ export class SupabaseCreditRepository implements ICreditRepository {
     const { data, error } = await db().from("profiles").select("*").eq("id", userId).maybeSingle();
     if (error) throw new Error(error.message);
     if (!data) return null;
-    return { userId, fullName: data.full_name, plan: data.plan as PlanId, credits: data.credits, held: data.held, renewsAt: data.renews_at ? new Date(data.renews_at) : null };
+    const renewsAt = data.renews_at ? new Date(data.renews_at) : null;
+    // A paid month that ended counts as Free right away (the daily cron also updates the row).
+    const plan = data.plan !== "free" && renewsAt && renewsAt.getTime() < Date.now() ? "free" : (data.plan as PlanId);
+    return { userId, fullName: data.full_name, plan, credits: data.credits, held: data.held, renewsAt };
   }
 
   async hold(userId: string, amount: number, reason: string, jobName: string) {

@@ -5,6 +5,7 @@ import type { Template } from "@/domain/entities/Template";
 import { loadAccount } from "@/lib/account";
 import { buildContainer } from "@/lib/container";
 import { readUpload } from "@/lib/uploads";
+import { adminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/supabase/server";
 import { TranslateForm } from "@/presentation/samesay/app/TranslateForm";
 import { NewUpload } from "@/presentation/samesay/app/NewUpload";
@@ -19,6 +20,9 @@ export default async function NewTranslationPage({ searchParams }: { searchParam
 
   if (!upload) return <NewUpload maxMin={PLANS[account.plan].maxMin} planName={PLANS[account.plan].name} />;
 
+  // Translation defaults from Settings; links like ?to=km&voice=natural win.
+  const { data: profile } = await adminClient().from("profiles").select("defaults").eq("id", user.id).maybeSingle();
+  const d = ((profile as { defaults?: Record<string, unknown> } | null)?.defaults ?? {}) as { to?: string; voice?: VoiceKind; bg?: boolean; subs?: boolean };
   const c = buildContainer();
   const list: Template[] = account.ready ? await new SupabaseTemplateRepository().listForUser(user.id).catch(() => []) : [];
   const templates = list.map((t) => ({ id: t.id, name: t.name, ratio: t.ratio }));
@@ -29,7 +33,7 @@ export default async function NewTranslationPage({ searchParams }: { searchParam
       credits={account.credits}
       ready={account.ready}
       available={{ voiceLanguages: c.ai.voiceLanguages(), background: c.separator.available }}
-      initial={{ to: searchParams.to, voice: searchParams.voice as VoiceKind | undefined }}
+      initial={{ to: searchParams.to ?? d.to, voice: (searchParams.voice as VoiceKind | undefined) ?? d.voice, bg: d.bg, subs: d.subs }}
       templates={templates}
     />
   );
