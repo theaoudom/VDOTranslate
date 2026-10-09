@@ -5,10 +5,11 @@ import { SupabasePaymentRepository } from "@/data/repositories/SupabasePaymentRe
 import { TelegramPaymentNotifier } from "@/data/telegram/TelegramPaymentNotifier";
 import type { Customer } from "@/domain/payments/Payment";
 import { PaymentUseCases } from "@/domain/payments/PaymentUseCases";
+import { reviewLink, reviewLinksReady } from "./paymentLinks";
 import { adminClient } from "./supabase/admin";
 
 export function buildPayments() {
-  return new PaymentUseCases(new SupabasePaymentRepository(), new TelegramPaymentNotifier());
+  return new PaymentUseCases(new SupabasePaymentRepository(), new TelegramPaymentNotifier((p, action) => reviewLink(p.id, action), reviewLinksReady()));
 }
 
 /** Where people send the money: set in .env.local, plus the KHQR picture at assets/khqr.png. */
