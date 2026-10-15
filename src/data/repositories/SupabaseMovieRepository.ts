@@ -46,6 +46,21 @@ export class SupabaseMovieRepository implements IMovieRepository {
     return fromRow(data);
   }
 
+  async mutate(id: string, change: (m: Movie) => Partial<Omit<Movie, "id" | "userId" | "createdAt" | "updatedAt">>): Promise<Movie> {
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const { data: cur, error: readErr } = await db().from("movies").select("*").eq("id", id).single();
+      if (readErr) throw new Error(readErr.message);
+      const row: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(change(fromRow(cur)))) if (COLUMNS[k]) row[COLUMNS[k]] = v;
+      // only saves if nobody saved since we read (updated_at is set by a trigger on every save)
+      const { data, error } = await db().from("movies").update(row).eq("id", id).eq("updated_at", cur.updated_at).select();
+      if (error) throw new Error(`Couldn't save the movie: ${error.message}`);
+      if (data?.length) return fromRow(data[0]);
+      await new Promise((r) => setTimeout(r, 50 + Math.random() * 150));
+    }
+    throw new Error("The movie is busy. Please try again.");
+  }
+
   async listMaking(): Promise<Movie[]> {
     const { data, error } = await db().from("movies").select("*").eq("status", "making").limit(200);
     if (error) throw new Error(error.message);

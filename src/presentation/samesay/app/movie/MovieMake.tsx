@@ -18,7 +18,7 @@ const busyShot = (s: Shot) => s.state === "queued" || s.state === "frame" || s.s
 export function MovieMake({ initial }: { initial: PublicMovie }) {
   const router = useRouter();
   const [m, setM] = useState(initial);
-  const running = m.status === "making" || m.shots.some(busyShot);
+  const running = m.status === "making" || (m.status === "done" && m.shots.some(busyShot));
 
   useEffect(() => {
     if (!running) return;
@@ -26,7 +26,7 @@ export function MovieMake({ initial }: { initial: PublicMovie }) {
       try {
         const next = await api(`/api/movies/${m.id}`, "GET");
         setM(next);
-        if (!(next.status === "making" || next.shots.some(busyShot))) router.refresh(); // balance changed
+        if (!(next.status === "making" || (next.status === "done" && next.shots.some(busyShot)))) router.refresh(); // balance changed
       } catch { setM((x) => ({ ...x })); }
     }, 4000);
     return () => clearTimeout(t);

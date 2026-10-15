@@ -208,9 +208,8 @@ export class MovieUseCases {
     if (!m) throw new Error(`Movie ${id} not found`);
     return m;
   }
-  private async setShot(id: string, shotId: string, patch: Partial<Shot>) {
-    const m = await this.load(id);
-    return this.movies.update(id, { shots: m.shots.map((s) => (s.id === shotId ? { ...s, ...patch } : s)) });
+  private setShot(id: string, shotId: string, patch: Partial<Shot>) {
+    return this.movies.mutate(id, (m) => ({ shots: m.shots.map((s) => (s.id === shotId ? { ...s, ...patch } : s)) }));
   }
 
   /** Picture (portrait or photo) for each character in the shot; portraits are made if missing. */
@@ -228,10 +227,11 @@ export class MovieUseCases {
         key = `${this.dir(m)}/${name}`;
         await this.store.save(key, local);
         cast = cast.map((x) => (x.id === cid ? { ...x, portrait: key } : x));
+        const made = key;
+        await this.movies.mutate(m.id, (cur) => ({ cast: cur.cast.map((x) => (x.id === cid && !x.portrait && !x.photo ? { ...x, portrait: made } : x)) }));
       }
       refs.push(await this.store.fetch(key));
     }
-    if (cast !== m.cast) await this.movies.update(m.id, { cast });
     return refs;
   }
 
@@ -310,7 +310,7 @@ export class MovieUseCases {
     const info = await this.ffmpeg.probe(local);
     // register it like an upload, so "Dub into Khmer" and "Split into parts" can use it
     await this.store.saveText(`${this.dir(m)}/upload.json`, JSON.stringify({ name: `${m.name}.mp4`, size: 0, ext: ".mp4", ...info }));
-    await this.movies.update(id, { files: { ...m.files, video: key } });
+    await this.movies.mutate(id, (cur) => ({ files: { ...cur.files, video: key } }));
     return true;
   }
 
@@ -327,7 +327,10 @@ export class MovieUseCases {
     const m = await this.movies.findById(id);
     if (!m || m.status !== "making") return;
     await this.credits.settle(m.userId, m.held, 0, m.name);
-    await this.movies.update(id, { status: "failed", error: message });
+    await this.movies.mutate(id, (cur) => ({
+      status: "failed", error: message,
+      shots: cur.shots.map((s) => (s.state === "done" || s.state === "blocked" || s.state === "failed" ? s : { ...s, state: "failed" as const, requestId: null })),
+    }));
   }
 
   /* ── Result: make one shot again ── */

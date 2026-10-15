@@ -34,9 +34,11 @@ export function MovieShots({ initial, credits }: { initial: PublicMovie; credits
   const [starting, setStarting] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout>>();
 
-  // the script changed: plan the shots again first
+  // the script changed: plan the shots again first (once)
+  const planned = useRef(false);
   useEffect(() => {
-    if (!initial.settings.shotsStale) return;
+    if (!initial.settings.shotsStale || planned.current) return;
+    planned.current = true;
     api(`/api/movies/${initial.id}/plan`).then(setM).catch((e) => toast((e as Error).message, true)).finally(() => setPlanning(false));
   }, [initial.id, initial.settings.shotsStale, toast]);
 

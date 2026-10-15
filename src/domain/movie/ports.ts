@@ -5,6 +5,11 @@ export interface IMovieRepository {
   findById(id: string): Promise<Movie | null>;
   listForUser(userId: string, limit?: number): Promise<Movie[]>;
   update(id: string, changes: Partial<Omit<Movie, "id" | "userId" | "createdAt" | "updatedAt">>): Promise<Movie>;
+  /**
+   * Read, change and save in one go: if the movie was saved by someone else in between
+   * (two shots being made at once), it reads again and re-applies `change`.
+   */
+  mutate(id: string, change: (m: Movie) => Partial<Omit<Movie, "id" | "userId" | "createdAt" | "updatedAt">>): Promise<Movie>;
   /** Movies still being made, for recovery. */
   listMaking(): Promise<Movie[]>;
 }
