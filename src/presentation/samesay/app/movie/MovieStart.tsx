@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Camera, FileText, FileUp, Heart, Languages, LoaderCircle, OctagonAlert, PenLine, ScanText, Sparkles } from "lucide-react";
 import { GENRES, LENGTHS, MODEL_ORDER, MODELS, MOVIE_COST, STYLES, type MovieGenre, type MovieRatio, type MovieStyle, type PublicMovie } from "@/domain/movie/Movie";
 import { useToast } from "../../Toast";
@@ -10,14 +10,14 @@ import { CostTable } from "../bits";
 import { fmt, mmss } from "../format";
 import { sendFile } from "../sendFile";
 import { useOpenSettings } from "../Settings";
-import { ClipForm, ModeSwitch, type MakeMode } from "./ClipForm";
+import { ClipForm, ModeSwitch, type ClipStart, type MakeMode } from "./ClipForm";
 import { api, GENRE_ICONS, PageHead, Stepper } from "./parts";
 
 type OwnMode = "paste" | "file" | "photo";
 type OwnFile = { kind: OwnMode; name: string; key: string; url: string | null };
 
 /** Step 1: an idea for the AI, or the user's own script (typed, a file, or a photo of paper). */
-export function MovieStart({ credits, movies }: { credits: number; movies: PublicMovie[] }) {
+export function MovieStart({ credits, movies, clipFrom }: { credits: number; movies: PublicMovie[]; clipFrom?: ClipStart | null }) {
   const router = useRouter();
   const toast = useToast();
   const openSettings = useOpenSettings();
@@ -25,6 +25,9 @@ export function MovieStart({ credits, movies }: { credits: number; movies: Publi
   const [source, setSource] = useState<"ai" | "own">("ai");
   const [genre, setGenre] = useState<MovieGenre>("action");
   const [idea, setIdea] = useState("");
+  // keep the idea if the page is closed before the script is written (this browser only)
+  useEffect(() => { try { const saved = localStorage.getItem("samesay-movie-idea"); if (saved) setIdea(saved); } catch {} }, []);
+  useEffect(() => { try { if (idea.trim()) localStorage.setItem("samesay-movie-idea", idea); else localStorage.removeItem("samesay-movie-idea"); } catch {} }, [idea]);
   const [length, setLength] = useState(60);
   const [ratio, setRatio] = useState<MovieRatio>("9:16");
   const [style, setStyle] = useState<MovieStyle>("cinematic");
@@ -60,6 +63,7 @@ export function MovieStart({ credits, movies }: { credits: number; movies: Publi
       const settings = { genre, idea, length, ratio, style };
       const own = source === "own" ? (ownMode === "paste" ? { text: ownText } : { files: files.map((f) => f.key) }) : undefined;
       const r = await api<{ id: string }>("/api/movies", "POST", { settings, own });
+      try { localStorage.removeItem("samesay-movie-idea"); } catch {}
       toast(source === "ai" ? `Script ready · ${cost} cr` : `Script read · ${cost} cr`);
       router.push(`/app/movie/${r.id}/script`);
       router.refresh();
@@ -74,7 +78,7 @@ export function MovieStart({ credits, movies }: { credits: number; movies: Publi
       <section>
         <PageHead title="Make an AI video" sub="Upload who’s in it, say what happens, and get one short video. You see the price before anything is made." />
         <ModeSwitch mode={mode} onChange={setMode} />
-        <ClipForm credits={credits} />
+        <ClipForm credits={credits} from={clipFrom} />
       </section>
     );
   }

@@ -22,6 +22,13 @@ const VIDEO: Record<ModelTier, { endpoint: string; input: Builder }> = {
   cinematic: { endpoint: "fal-ai/veo3.1/image-to-video", input: veo },
 };
 
+/** Our fal.ai account problems (no balance, bad key) — for the server log, not the customer. */
+function explain(e: unknown) {
+  const body = JSON.stringify((e as { body?: unknown })?.body ?? "");
+  if (/exhausted balance|locked/i.test(body)) console.error("[fal] The fal.ai account is out of balance. Top up at fal.ai/dashboard/billing.");
+  else if ((e as { status?: number })?.status === 401) console.error("[fal] FAL_KEY was refused. Check the key in .env.local / Vercel.");
+}
+
 let configured = false;
 function client() {
   if (!configured) {
@@ -61,6 +68,7 @@ async function image(endpoint: string, input: Record<string, unknown>, outPath: 
   } catch (e) {
     if (e instanceof BlockedContentError) throw e;
     if (isBlocked(e)) throw new BlockedContentError("The picture was blocked by the safety filter.");
+    explain(e);
     throw e;
   }
 }
@@ -88,6 +96,7 @@ export class FalMovieMedia implements IMovieMedia {
       return request_id;
     } catch (e) {
       if (isBlocked(e)) throw new BlockedContentError("The shot was blocked by the safety filter.");
+      explain(e);
       throw e;
     }
   }

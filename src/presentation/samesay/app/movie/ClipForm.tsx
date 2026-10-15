@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Clapperboard, Heart, LoaderCircle, OctagonAlert, ShieldCheck, WandSparkles } from "lucide-react";
 import { CLIP_CONSENT, CLIP_LENGTHS, CLIP_MODELS, fitDuration, MODELS, MOVIE_COST, STYLES, type ModelTier, type MovieRatio, type MovieStyle } from "@/domain/movie/Movie";
 import { useToast } from "../../Toast";
@@ -40,19 +40,33 @@ function MeterAfter({ cost, credits }: { cost: number; credits: number }) {
 
 type Photo = { key: string; name: string; url: string };
 
+/** A failed clip to start from ("Change and try again"). */
+export interface ClipStart { prompt: string; photos: Photo[]; sec: number; model: ModelTier; ratio: MovieRatio; style: MovieStyle }
+
+const DRAFT_KEY = "samesay-clip-draft";
+
 /** Quick clip: who's in it (optional photos), what happens, length, frame, look, quality. */
-export function ClipForm({ credits }: { credits: number }) {
+export function ClipForm({ credits, from }: { credits: number; from?: ClipStart | null }) {
   const router = useRouter();
   const toast = useToast();
   const openSettings = useOpenSettings();
-  const [photos, setPhotos] = useState<Photo[]>([]);
+  const [photos, setPhotos] = useState<Photo[]>(from?.photos ?? []);
   const [uploading, setUploading] = useState<number | null>(null);
   const [consent, setConsent] = useState(false);
-  const [prompt, setPrompt] = useState("");
-  const [sec, setSec] = useState(10);
-  const [ratio, setRatio] = useState<MovieRatio>("9:16");
-  const [style, setStyle] = useState<MovieStyle>("cinematic");
-  const [model, setModel] = useState<ModelTier>("draft");
+  const [prompt, setPrompt] = useState(from?.prompt ?? "");
+  const [sec, setSec] = useState(from?.sec ?? 10);
+  const [ratio, setRatio] = useState<MovieRatio>(from?.ratio ?? "9:16");
+  const [style, setStyle] = useState<MovieStyle>(from?.style ?? "cinematic");
+  const [model, setModel] = useState<ModelTier>(from?.model ?? "draft");
+
+  // keep what was typed if the page is closed before making it (this browser only)
+  useEffect(() => {
+    if (from) return;
+    try { const saved = localStorage.getItem(DRAFT_KEY); if (saved) setPrompt(saved); } catch {}
+  }, [from]);
+  useEffect(() => {
+    try { if (prompt.trim()) localStorage.setItem(DRAFT_KEY, prompt); else localStorage.removeItem(DRAFT_KEY); } catch {}
+  }, [prompt]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -77,6 +91,7 @@ export function ClipForm({ credits }: { credits: number }) {
     setBusy(true);
     try {
       const r = await api("/api/movies/clip", "POST", { prompt, photos: photos.map((p) => p.key), consent, sec, model, ratio, style });
+      try { localStorage.removeItem(DRAFT_KEY); } catch {}
       toast(`Started. ${fmt(r.held)} cr held.`);
       router.push(`/app/movie/${r.id}/make`);
       router.refresh();

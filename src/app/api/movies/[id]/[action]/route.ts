@@ -36,6 +36,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string;
       }
       break;
     }
+    case "retry": {
+      r = await movies.retry(uid, id);
+      if (r.ok && r.movie.status === "making") {
+        try { await start(makeMovie, [id, r.movie.shots.map((s) => s.id)]); }
+        catch (e) { console.error("[movie] couldn't start", e); await movies.failMovie(id, "We couldn’t start making it. All held credits were returned."); return NextResponse.json({ error: "We couldn’t start. Your credits were returned. Please try again." }, { status: 503 }); }
+      }
+      break;
+    }
     case "remake": {
       r = await movies.startRemake(uid, id, String(body?.shotId ?? ""), String(body?.desc ?? ""));
       if (r.ok) await start(remakeMovieShot, [id, String(body.shotId)]);

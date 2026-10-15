@@ -366,6 +366,23 @@ export class MovieUseCases {
     }));
   }
 
+  /**
+   * A failed movie or clip, ready to make again with the same script, characters, photos
+   * and shots (nothing is written again). A clip starts right away; a movie goes back to
+   * its Shots step. Credits are held again only when it starts.
+   */
+  async retry(userId: string, id: string): Promise<MovieResult> {
+    const m = await this.owned(userId, id);
+    if (!m) return fail(404, "Movie not found.");
+    if (m.status !== "failed") return fail(409, "This movie didn’t fail.");
+    const shots = m.shots.map((s) => ({ ...s, state: "planned" as const, frame: null, file: null, requestId: null, error: null }));
+    await this.movies.update(id, { status: "draft", held: 0, used: 0, error: null, shots, files: {} });
+    if (m.settings.kind !== "clip") return { ok: true, movie: (await this.movies.findById(id))! };
+    const started = await this.start(userId, id);
+    if (!started.ok) await this.movies.update(id, { status: "failed", error: started.message });
+    return started;
+  }
+
   /* ── Result: make one shot again ── */
   async startRemake(userId: string, id: string, shotId: string, desc: string): Promise<MovieResult> {
     const m = await this.owned(userId, id);

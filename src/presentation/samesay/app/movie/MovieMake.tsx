@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Circle, CircleCheck, Download, Info, LayoutTemplate, Languages, LoaderCircle, OctagonAlert, Pencil, Plus, RefreshCw, Scissors, ShieldAlert } from "lucide-react";
-import { GENRES, MODELS, shotCost, type PublicMovie } from "@/domain/movie/Movie";
+import { estimateMovie, GENRES, MODELS, shotCost, type PublicMovie } from "@/domain/movie/Movie";
 import { Modal } from "../../Modal";
 import { useToast } from "../../Toast";
 import { CostTable } from "../bits";
@@ -33,7 +33,7 @@ export function MovieMake({ initial }: { initial: PublicMovie }) {
   }, [m, running, router]);
 
   if (m.status === "making") return <Making m={m} />;
-  if (m.status === "failed") return <Failed m={m} />;
+  if (m.status === "failed") return <Failed m={m} onChange={setM} />;
   return <Result m={m} onChange={setM} />;
 }
 
@@ -75,11 +75,31 @@ function Making({ m }: { m: PublicMovie }) {
   );
 }
 
-function Failed({ m }: { m: PublicMovie }) {
+function Failed({ m, onChange }: { m: PublicMovie; onChange: (m: PublicMovie) => void }) {
+  const router = useRouter();
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const clip = m.settings.kind === "clip";
+  const price = estimateMovie(m.shots).total;
+  async function retry() {
+    setBusy(true);
+    try {
+      const next = await api(`/api/movies/${m.id}/retry`);
+      if (clip) { toast(`Started again. ${fmt(next.held)} cr held.`); onChange(next); router.refresh(); }
+      else router.push(`/app/movie/${m.id}/shots`);
+    } catch (e) { toast((e as Error).message, true); setBusy(false); }
+  }
   return (
     <section>
-      <PageHead title={m.name} sub={`${GENRES[m.settings.genre].name} · ${m.settings.ratio}`} right={<Link className="btn" href="/app/movie"><Plus />New movie</Link>} />
-      <div className="note rec"><OctagonAlert /><div><b>This movie couldn’t be made.</b> {m.error ?? "All held credits were returned."}</div></div>
+      <PageHead title={m.name} sub={`${clip ? "Quick clip" : GENRES[m.settings.genre].name} · ${m.settings.ratio}`} right={<Link className="btn" href="/app/movie"><Plus />{clip ? "New video" : "New movie"}</Link>} />
+      <div className="note rec" style={{ marginBottom: "var(--sp-4)" }}><OctagonAlert /><div><b>{clip ? "This video couldn’t be made." : "This movie couldn’t be made."}</b> {m.error ?? "All held credits were returned."}</div></div>
+      <div className="panel"><div className="panel-head"><h3>Try again</h3></div><div className="panel-body stack">
+        <p className="muted t-small">{clip ? "Everything you entered is kept: the photos, what happens and the settings." : "Your script, characters and shots are kept. Nothing is written again."}</p>
+        <div className="hstack">
+          <button className="btn primary" disabled={busy} onClick={retry}>{busy ? <><LoaderCircle />Starting…</> : <><RefreshCw />{clip ? `Try again · ${fmt(price)} cr` : "Try again"}</>}</button>
+          {clip ? <Link className="btn" href={`/app/movie?from=${m.id}`}><Pencil />Change and try again</Link> : null}
+        </div>
+      </div></div>
     </section>
   );
 }
