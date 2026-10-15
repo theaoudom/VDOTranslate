@@ -142,6 +142,7 @@ export function ClipForm({ credits, from }: { credits: number; from?: ClipStart 
           <div className="field"><span className="label">Look</span><div className="seg">{(Object.keys(STYLES) as MovieStyle[]).map((k) => <button key={k} aria-pressed={style === k} onClick={() => setStyle(k)}>{STYLES[k]}</button>)}</div></div>
           <div className="field">
             <span className="label">Quality</span>
+            {photos.length > 0 && <span className="hint">With photos, Standard and Lead face keep faces closest to the photos.</span>}
             <div className="opts" style={{ gridTemplateColumns: "repeat(2,minmax(0,1fr))" }}>
               {CLIP_MODELS.map((k) => {
                 const mm = MODELS[k], s2 = fitDuration(sec, k);

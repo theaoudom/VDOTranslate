@@ -281,9 +281,11 @@ export class MovieUseCases {
     await this.setShot(id, shotId, { state: "frame" });
     try {
       const refs = await this.references(m, sh);
+      if (refs.length && this.media.usesReferences(sh.model)) return true; // the model works from the pictures directly
       const name = `frame-${sh.id}-${Date.now()}.jpg`;
       const local = this.local(m, name);
-      await this.media.frame(`${this.shotPrompt(m, sh)} First frame of the shot, ${m.settings.ratio} frame.`, refs, m.settings.ratio, local);
+      const keepFaces = refs.length ? " Everyone’s face is clearly visible (not turned away or hidden) and exactly the same as in the reference photos: same face, hair and skin." : "";
+      await this.media.frame(`The very first moment of this video: ${this.shotPrompt(m, sh)}${keepFaces} ${m.settings.ratio} frame.`, refs, m.settings.ratio, local);
       await this.store.save(`${this.dir(m)}/${name}`, local);
       await this.setShot(id, shotId, { frame: `${this.dir(m)}/${name}` });
       return true;
@@ -299,7 +301,10 @@ export class MovieUseCases {
     const sh = m.shots.find((s) => s.id === shotId)!;
     if (sh.requestId) return true; // already asked (a retry)
     try {
-      const requestId = await this.media.startShot(sh.model, this.shotPrompt(m, sh), await this.store.fetch(sh.frame!), sh.sec, m.settings.ratio);
+      const refs = this.media.usesReferences(sh.model) ? await this.references(m, sh) : [];
+      const frame = sh.frame ? await this.store.fetch(sh.frame) : null;
+      if (!frame && !refs.length) throw new Error("The shot has no first frame.");
+      const requestId = await this.media.startShot(sh.model, this.shotPrompt(m, sh), frame, sh.sec, m.settings.ratio, refs);
       await this.setShot(id, shotId, { state: "making", requestId });
       return true;
     } catch (e) {

@@ -10,7 +10,8 @@ import { BlockedContentError, type IMovieMedia, type ShotCheck } from "@/domain/
  * so a tier can move to a cheaper model by changing one line below.
  */
 const PORTRAIT = "fal-ai/flux-2";
-const FRAME = "fal-ai/flux-2/edit";
+/** first frames from the people's pictures: Nano Banana keeps faces closest */
+const FRAME = "fal-ai/nano-banana-2/edit";
 
 type Builder = (a: { prompt: string; image: string; sec: number; ratio: MovieRatio }) => Record<string, unknown>;
 const veo: Builder = ({ prompt, image, sec, ratio }) => ({ prompt, image_url: image, duration: `${sec}s`, aspect_ratio: ratio, resolution: "720p", generate_audio: true });
@@ -28,6 +29,19 @@ function explain(e: unknown) {
   if (/exhausted balance|locked/i.test(body)) console.error("[fal] The fal.ai account is out of balance. Top up at fal.ai/dashboard/billing.");
   else if ((e as { status?: number })?.status === 401) console.error("[fal] FAL_KEY was refused. Check the key in .env.local / Vercel.");
 }
+
+/** Reference mode: the video model sees the people's photos directly (no first frame). */
+type RefBuilder = (a: { prompt: string; refs: string[]; sec: number; ratio: MovieRatio }) => Record<string, unknown>;
+const REFERENCE: Partial<Record<ModelTier, { endpoint: string; input: RefBuilder }>> = {
+  standard: {
+    endpoint: "alibaba/wan-3.0/reference-to-video",
+    input: ({ prompt, refs, sec, ratio }) => ({ prompt: `${prompt} The people are the people in the reference images: keep their faces, hair and skin exactly.`, reference_image_urls: refs, duration: sec, aspect_ratio: ratio, resolution: "720p", audio: true }),
+  },
+  lead: {
+    endpoint: "bytedance/seedance-2.0/reference-to-video",
+    input: ({ prompt, refs, sec, ratio }) => ({ prompt: `The people are ${refs.map((_, i) => `@Image${i + 1}`).join(" and ")}; keep their faces exactly. ${prompt}`, image_urls: refs, duration: String(sec), aspect_ratio: ratio, resolution: "720p", generate_audio: true }),
+  },
+};
 
 let configured = false;
 function client() {
@@ -85,13 +99,23 @@ export class FalMovieMedia implements IMovieMedia {
       return;
     }
     const urls = await Promise.all(references.slice(0, 4).map(upload));
-    await image(FRAME, { prompt, image_urls: urls, image_size: size, output_format: "jpeg", enable_safety_checker: true }, outPath);
+    await image(FRAME, { prompt, image_urls: urls, aspect_ratio: ratio, resolution: "1K", output_format: "jpeg" }, outPath);
   }
 
-  async startShot(tier: ModelTier, prompt: string, framePath: string, sec: number, ratio: MovieRatio) {
-    const m = VIDEO[tier];
+  usesReferences(tier: ModelTier) {
+    return Boolean(REFERENCE[tier]);
+  }
+
+  async startShot(tier: ModelTier, prompt: string, framePath: string | null, sec: number, ratio: MovieRatio, references: string[]) {
+    const ref = REFERENCE[tier];
     try {
-      const imageUrl = await upload(framePath);
+      if (ref && references.length) {
+        const refs = await Promise.all(references.slice(0, 4).map(upload));
+        const { request_id } = await client().queue.submit(ref.endpoint, { input: ref.input({ prompt, refs, sec, ratio }) });
+        return `ref|${request_id}`;
+      }
+      const m = VIDEO[tier];
+      const imageUrl = await upload(framePath!);
       const { request_id } = await client().queue.submit(m.endpoint, { input: m.input({ prompt, image: imageUrl, sec, ratio }) });
       return request_id;
     } catch (e) {
@@ -102,7 +126,9 @@ export class FalMovieMedia implements IMovieMedia {
   }
 
   async checkShot(tier: ModelTier, requestId: string, outPath: string): Promise<ShotCheck> {
-    const m = VIDEO[tier];
+    const isRef = requestId.startsWith("ref|");
+    const m = isRef ? REFERENCE[tier]! : VIDEO[tier];
+    requestId = isRef ? requestId.slice(4) : requestId;
     const st = await client().queue.status(m.endpoint, { requestId, logs: false });
     if (st.status !== "COMPLETED") return { state: "running" };
     try {

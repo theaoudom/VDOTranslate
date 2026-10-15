@@ -53,8 +53,13 @@ export interface IMovieMedia {
   portrait(prompt: string, outPath: string): Promise<void>;
   /** the first frame of a shot, keeping the characters' faces from their pictures */
   frame(prompt: string, references: string[], ratio: MovieRatio, outPath: string): Promise<void>;
-  /** starts making a shot; returns the request to check later */
-  startShot(tier: ModelTier, prompt: string, framePath: string, sec: number, ratio: MovieRatio): Promise<string>;
+  /**
+   * Whether this model takes the people's pictures directly (reference mode). Those shots
+   * skip the first frame and keep faces closer to the photos.
+   */
+  usesReferences(tier: ModelTier): boolean;
+  /** starts making a shot from its first frame, or from the people's pictures (reference mode); returns the request to check later */
+  startShot(tier: ModelTier, prompt: string, framePath: string | null, sec: number, ratio: MovieRatio, references: string[]): Promise<string>;
   checkShot(tier: ModelTier, requestId: string, outPath: string): Promise<ShotCheck>;
 }
 

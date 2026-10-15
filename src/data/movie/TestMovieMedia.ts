@@ -39,7 +39,11 @@ export class TestMovieMedia implements IMovieMedia {
     await run(["-f", "lavfi", "-i", `color=c=${color(hueOf(prompt))}:s=${size(ratio)}`, "-vf", "vignette=PI/4", "-frames:v", "1", outPath]);
   }
 
-  async startShot(tier: ModelTier, prompt: string, framePath: string, sec: number, ratio: MovieRatio) {
+  usesReferences() {
+    return false;
+  }
+
+  async startShot(tier: ModelTier, prompt: string, _framePath: string | null, sec: number, ratio: MovieRatio) {
     if (prompt.includes("TEST-BLOCK")) throw new BlockedContentError("The shot was blocked by the safety filter.");
     return `test|${tier}|${sec}|${ratio}|${Date.now()}`;
   }
