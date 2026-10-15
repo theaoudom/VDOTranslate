@@ -10,6 +10,7 @@ import { CostTable } from "../bits";
 import { fmt, mmss } from "../format";
 import { sendFile } from "../sendFile";
 import { useOpenSettings } from "../Settings";
+import { ClipForm, ModeSwitch, type MakeMode } from "./ClipForm";
 import { api, GENRE_ICONS, PageHead, Stepper } from "./parts";
 
 type OwnMode = "paste" | "file" | "photo";
@@ -20,6 +21,7 @@ export function MovieStart({ credits, movies }: { credits: number; movies: Publi
   const router = useRouter();
   const toast = useToast();
   const openSettings = useOpenSettings();
+  const [mode, setMode] = useState<MakeMode>("clip");
   const [source, setSource] = useState<"ai" | "own">("ai");
   const [genre, setGenre] = useState<MovieGenre>("action");
   const [idea, setIdea] = useState("");
@@ -67,9 +69,20 @@ export function MovieStart({ credits, movies }: { credits: number; movies: Publi
     }
   }
 
+  if (mode === "clip") {
+    return (
+      <section>
+        <PageHead title="Make an AI video" sub="Upload who’s in it, say what happens, and get one short video. You see the price before anything is made." />
+        <ModeSwitch mode={mode} onChange={setMode} />
+        <ClipForm credits={credits} />
+      </section>
+    );
+  }
+
   return (
     <section>
       <PageHead title="Make an AI movie" sub="Turn an idea into a short movie for TikTok, Reels or YouTube. You see every step and the price before anything is made." />
+      <ModeSwitch mode={mode} onChange={setMode} />
       <Stepper at="movie" />
       <div className="grid g-2-1">
         <div className="stack">
@@ -156,7 +169,7 @@ export function MovieStart({ credits, movies }: { credits: number; movies: Publi
               {movies.map((m) => (
                 <Link key={m.id} className="row click" href={`/app/movie/${m.id}/${m.status === "draft" ? "script" : "make"}`} style={{ color: "var(--text)", textDecoration: "none" }}>
                   <div className="thumb"><span className="dur">{mmss(m.shots.filter((s) => m.status === "draft" || s.state === "done").reduce((a, s) => a + s.sec, 0))}</span></div>
-                  <div className="main"><div className="title">{m.name}</div><div className="meta">{m.status === "draft" ? "Draft" : m.status === "making" ? "Making…" : m.status === "failed" ? "Failed" : new Date(m.updatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })} · {fmt(m.used)} cr</div></div>
+                  <div className="main"><div className="title">{m.name}</div><div className="meta">{m.settings.kind === "clip" ? "Quick clip · " : ""}{m.status === "draft" ? "Draft" : m.status === "making" ? "Making…" : m.status === "failed" ? "Failed" : new Date(m.updatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })} · {fmt(m.used)} cr</div></div>
                 </Link>
               ))}
             </div></div>

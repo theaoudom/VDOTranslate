@@ -98,6 +98,8 @@ export interface MovieSettings {
   fromOwn?: boolean;
   /** the script changed since the shots were planned */
   shotsStale?: boolean;
+  /** "clip" = Quick clip: one shot straight from photos and one sentence */
+  kind?: "movie" | "clip";
 }
 
 export interface Movie {
@@ -193,6 +195,11 @@ const words = (t: string) => (t || "").trim().split(/\s+/).filter(Boolean).lengt
 /** About how long a scene plays: some time for the action, plus the lines being spoken. */
 export const sceneSec = (sc: Pick<Scene, "text" | "lines">) => Math.round(3 + words(sc.text) * 0.3 + sc.lines.reduce((a, l) => a + 1 + words(l.text) * 0.42, 0));
 export const scriptSec = (script: Scene[]) => script.reduce((a, sc) => a + sceneSec(sc), 0);
+
+/** Quick clip: lengths offered and the models that make them. */
+export const CLIP_LENGTHS = [5, 10];
+export const CLIP_MODELS: ModelTier[] = ["draft", "standard", "lead", "cinematic"];
+export const CLIP_CONSENT = "These are me, or the people in the photos agreed to be in this video. They’re adults and not famous people.";
 
 /** Words that are never made into a movie (checked before the AI moderation too). */
 export const BLOCKED_WORDS = /\b(sex|sexual|nude|naked|porn|nsfw|erotic)\b/i;

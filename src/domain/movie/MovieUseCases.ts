@@ -3,6 +3,7 @@ import type { ICreditRepository } from "@/domain/repositories/ICreditRepository"
 import type { IFileStore } from "@/domain/repositories/IFileStore";
 import type { IMediaRepository } from "@/domain/repositories/IMediaRepository";
 import {
+  CLIP_CONSENT, CLIP_MODELS, type ModelTier,
   autoModel, BLOCKED_WORDS, estimateMovie, fillLength, fitDuration, MODELS, MOVIE_COST, PHOTO_CONSENT, sanitizeScript, shotCost, STYLES,
   type Character, type Movie, type MovieQuality, type MovieSettings, type Scene, type Shot,
 } from "./Movie";
@@ -80,6 +81,34 @@ export class MovieUseCases {
     const { cast, shots } = this.toMovie(r.value, "balanced", settings.length);
     const movie = await this.movies.create({ userId, name: r.value.name, settings: { ...settings, fromOwn: Boolean(own) }, script: r.value.script, cast, shots, quality: "balanced" });
     return { ok: true, movie };
+  }
+
+  /**
+   * Quick clip: photos (optional, up to 2) and one sentence become one short video.
+   * Creates a one-shot movie and holds its price; the caller starts the workflow.
+   */
+  async createClip(userId: string, input: { prompt: string; photos: string[]; consent: boolean; sec: number; model: ModelTier; ratio: Movie["settings"]["ratio"]; style: Movie["settings"]["style"] }): Promise<MovieResult> {
+    const acc = await this.credits.getAccount(userId);
+    if (!acc) return fail(401, "Please log in again.");
+    if (acc.plan === "free") return fail(403, "AI movies come with Creator and Studio.");
+    const prompt = input.prompt.trim().slice(0, 800);
+    if (!prompt) return fail(400, "Say what happens first.");
+    if (!(await this.check(prompt))) return fail(422, NOT_ALLOWED);
+    const photos = input.photos.slice(0, 2);
+    if (photos.length && !input.consent) return fail(400, "Tick the box to confirm you may use these photos.");
+    for (const key of photos) if (!key.startsWith(`${userId}/movies/`) || !(await this.store.exists(key))) return fail(404, "Photo not found. Please add it again.");
+    const at = new Date().toISOString();
+    const cast: Character[] = photos.map((key, i) => ({ id: `p${i + 1}`, name: `Person ${i + 1}`, role: "Lead", desc: "", hue: i ? 330 : 28, ver: 1, portrait: null, photo: key, consent: { at, text: CLIP_CONSENT } }));
+    const model = CLIP_MODELS.includes(input.model) ? input.model : "draft";
+    const title = prompt.split(/[.,!?]/)[0].slice(0, 60) || "My video";
+    const shot: Shot = { id: "clip", scene: "", title, desc: prompt, sec: fitDuration(input.sec, model), kind: "close", cast: cast.map((c) => c.id), say: "", model, state: "planned" };
+    const draft = await this.movies.create({
+      userId, name: title, quality: "custom", script: [], cast, shots: [shot],
+      settings: { genre: "drama", length: shot.sec, ratio: input.ratio, style: input.style, source: "ai", idea: prompt, kind: "clip" },
+    });
+    const started = await this.start(userId, draft.id);
+    if (!started.ok) await this.movies.update(draft.id, { status: "failed", error: started.message });
+    return started;
   }
 
   /* ── 2. Script ── */
@@ -236,6 +265,10 @@ export class MovieUseCases {
   }
 
   private shotPrompt(m: Movie, sh: Shot) {
+    if (m.settings.kind === "clip") {
+      const who = sh.cast.length ? ` The ${sh.cast.length > 1 ? "people look" : "person looks"} exactly like the reference photo${sh.cast.length > 1 ? "s" : ""}.` : "";
+      return `${STYLES[m.settings.style]} short video. ${sh.desc}.${who} Natural movement and sound.`;
+    }
     const people = sh.cast.map((cid) => m.cast.find((c) => c.id === cid)).filter(Boolean).map((c) => `${c!.name}: ${c!.desc}`).join(" ");
     return [`${STYLES[m.settings.style]} ${m.settings.genre} movie shot.`, sh.desc, people && `Characters: ${people}`, sh.say && `Dialogue (spoken in English): ${sh.say}`, "Natural sound."].filter(Boolean).join(" ");
   }

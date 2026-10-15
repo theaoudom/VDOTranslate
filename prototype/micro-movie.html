@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- prototype: micro-movie (named "AI movie" in the app) · status: confirmed 2026-10-15 · revised 2026-10-15: lengths 0:10 and 0:15 added · screens: idea (+ romance note, own script: paste / file / photo of paper), script editor (scene changes, lines, length; + failed), characters (+ use a photo with consent), shots & price (+ not enough credits), making, result (one shot blocked), idea not allowed, Free plan locked -->
+<!-- prototype: micro-movie (named "AI movie" in the app) · status: confirmed 2026-10-15 · revised 2026-10-15: lengths 0:10 and 0:15 added; Quick clip (photos + one sentence → one short video) added · screens: idea (+ romance note, own script: paste / file / photo of paper), script editor (scene changes, lines, length; + failed), characters (+ use a photo with consent), shots & price (+ not enough credits), making, result (one shot blocked), idea not allowed, Free plan locked -->
 <html lang="en" data-theme="light">
 <head>
 <meta charset="utf-8">
@@ -866,6 +866,7 @@ var S;
 function freshState(credits,plan){return {credits:credits,plan:plan,
   genre:'action',idea:'A delivery rider in Phnom Penh finds out his last package is a stolen jade dragon. A gang chases him through the night market.',
   length:60,ratio:'9:16',style:'cinematic',ideaError:null,
+  mode:'clip',clip:{photos:[],consent:false,prompt:'They hold hands by the river at sunset, smile at each other, then share a sweet kiss.',sec:10,model:'draft',error:null},
   source:'ai',ownMode:'paste',ownText:'',ownFile:null,fromOwn:false,changing:null,tones:{},
   script:null,scriptError:false,cast:null,shots:null,quality:'balanced',
   run:null,result:null,movies:[{id:'m0',name:'Monsoon Courier · ep. 1',dur:58,when:'Yesterday',used:1420}]}}
@@ -929,10 +930,75 @@ function lockedView(el){
     '</div>';
 }
 
+/* "What do you want to make?" — Quick clip or Movie */
+function modeSwitch(){
+  return '<div class="panel" style="margin-bottom:var(--sp-4)"><div class="panel-body"><div class="field"><span class="label">What do you want to make?</span><div class="opts" id="mv-mode" style="grid-template-columns:repeat(2,minmax(0,1fr))">'+
+    '<button class="opt" data-mode="clip" aria-pressed="'+(S.mode==='clip')+'"><span class="t">'+ic('wand-sparkles')+'Quick clip</span><span class="d">One short video from your photos and one sentence.</span><span class="p">from '+fmt(4*MODELS.draft.rate)+' cr</span></button>'+
+    '<button class="opt" data-mode="movie" aria-pressed="'+(S.mode==='movie')+'"><span class="t">'+ic('clapperboard')+'Movie</span><span class="d">A story with scenes, characters and shots.</span><span class="p">from about '+fmt(10*MODELS.draft.rate*1.1+COST.script)+' cr</span></button>'+
+  '</div></div></div></div>';
+}
+function wireMode(el){$('#mv-mode',el).addEventListener('click',function(e){var b=e.target.closest('[data-mode]');if(!b)return;keepIdea();keepClip();S.mode=b.dataset.mode;render()})}
+var CLIP_MODELS=['draft','standard','lead','cinematic'];
+function clipSec(){return fitSec(S.clip.sec,S.clip.model)}
+function fitSec(sec,m){var d={draft:[4,6,8],cinematic:[4,6,8]}[m]||[4,5,6,7,8,10];return d.reduce(function(b,x){return Math.abs(x-sec)<Math.abs(b-sec)?x:b})}
+function keepClip(){var t=$('#clip-prompt');if(t)S.clip.prompt=t.value}
+R.clip=function(el){
+  var c=S.clip,sec=clipSec(),m=MODELS[c.model],sub=sec*m.rate,buf=Math.ceil(sub*COST.buffer),total=sub+buf,short=total>S.credits;
+  el.innerHTML=head('Make an AI video','Upload who’s in it, say what happens, and get one short video. You see the price before anything is made.')+modeSwitch()+
+    '<div class="grid g-2-1"><div class="stack">'+
+      '<div class="panel"><div class="panel-body stack" style="gap:var(--sp-5)">'+
+        '<div class="field"><span class="label">Who’s in it <span class="faint t-xs" style="font-weight:400">· optional, up to 2 people</span></span><div class="two">'+
+          [0,1].map(function(i){var ph=c.photos[i];return '<label class="mv-upload" for="clip-ph-'+i+'">'+
+            '<div class="mv-portrait'+(ph&&ph.url?' photo':'')+'" style="--h:'+(i?330:28)+';width:64px;height:64px'+(ph&&ph.url?';background-image:url('+ph.url+')':'')+'"><span>'+(i+1)+'</span>'+(ph?'<span class="tag">Photo</span>':'')+'</div>'+
+            '<div class="stack" style="gap:2px;min-width:0"><b class="t-small">'+(ph?esc(ph.name):'Person '+(i+1))+'</b><span class="faint t-xs">'+(ph?'<button class="linkbtn" data-act="clip-remove" data-i="'+i+'">Remove</button>':'Add a photo · one face, good light')+'</span></div>'+
+            '<input type="file" id="clip-ph-'+i+'" data-clip-photo="'+i+'" accept="image/png,image/jpeg,image/webp" hidden></label>'}).join('')+
+        '</div>'+
+        (c.photos.length?'<label class="check" style="align-items:flex-start"><input type="checkbox" id="clip-consent"'+(c.consent?' checked':'')+'><span>These are me, or the people in the photos agreed to be in this video. They’re adults and not famous people.</span></label>':'<span class="hint">No photos? We make up the people from your words.</span>')+
+        '</div>'+
+        '<div class="field"><label class="label" for="clip-prompt">What happens</label><textarea class="textarea'+(c.error?' invalid':'')+'" id="clip-prompt" rows="4" placeholder="Who does what, where? e.g. They dance in the rain on a city street at night.">'+esc(c.prompt)+'</textarea>'+
+          (c.error?'<span class="hint err">'+c.error+'</span>':'<span class="hint">One or two sentences. Say where, what they do and the mood.</span>')+'</div>'+
+        '<div class="note">'+ic('heart')+'<div>Sweet and romantic is fine, up to hugs and kisses. Nudity and sexual scenes can’t be made.</div></div>'+
+        '<div class="two">'+
+          '<div class="field"><span class="label">Length</span><div class="seg" id="clip-len">'+[5,10].map(function(x){return '<button data-sec="'+x+'" aria-pressed="'+(c.sec===x)+'">'+x+' s</button>'}).join('')+'</div>'+(sec!==c.sec?'<span class="hint">'+m.name+' makes '+sec+' s videos.</span>':'')+'</div>'+
+          '<div class="field"><span class="label">Frame</span><div class="seg" id="mv-ratio">'+['9:16','16:9'].map(function(r){return '<button data-ratio="'+r+'" aria-pressed="'+(S.ratio===r)+'">'+r+(r==='9:16'?' · phone':' · wide')+'</button>'}).join('')+'</div></div>'+
+        '</div>'+
+        '<div class="field"><span class="label">Look</span><div class="seg" id="mv-style">'+Object.keys(STYLES).map(function(k){return '<button data-style="'+k+'" aria-pressed="'+(S.style===k)+'">'+STYLES[k]+'</button>'}).join('')+'</div></div>'+
+        '<div class="field"><span class="label">Quality</span><div class="opts" id="clip-model" style="grid-template-columns:repeat(2,minmax(0,1fr))">'+CLIP_MODELS.map(function(k){var mm=MODELS[k],s2=fitSec(c.sec,k);return '<button class="opt" data-model="'+k+'" aria-pressed="'+(c.model===k)+'"><span class="t">'+mm.name+(k==='lead'?'<span class="badge ok">Best faces</span>':'')+'</span><span class="d">'+mm.desc+'</span><span class="p">'+s2+' s · '+fmt(s2*mm.rate)+' cr</span></button>'}).join('')+'</div></div>'+
+      '</div></div>'+
+    '</div>'+
+    '<div class="stack sticky"><div class="panel"><div class="panel-head"><h3>Price</h3></div><div class="panel-body stack">'+
+      costTable([[m.model,sec+' s × '+m.rate+' cr',sub]],total,buf,'Held while it’s made')+meterAfter(total)+
+      '<div class="note accent">'+ic('shield-check')+'<div>If the video is <b>blocked by the safety filter</b> or fails, all credits come back.</div></div>'+
+      (short?'<div class="note rec">'+ic('octagon-alert')+'<div><b>Not enough credits.</b> <a href="#" data-act="billing">Top up</a>, or choose Draft.</div></div>':'')+
+      '<button class="btn primary block lg" data-act="make-clip"'+(short?' disabled':'')+'>'+ic('wand-sparkles')+'Make the video · '+fmt(total)+' cr</button>'+
+      '<span class="faint t-xs">Takes 1–3 minutes. You can leave this page.</span>'+
+    '</div></div></div></div>';
+  wireMode(el);
+  $('#clip-prompt',el).addEventListener('input',function(e){S.clip.prompt=e.target.value});
+  var cc=$('#clip-consent',el);if(cc)cc.addEventListener('change',function(){S.clip.consent=cc.checked});
+  $$('[data-clip-photo]',el).forEach(function(inp){inp.addEventListener('change',function(){var f=inp.files[0];if(!f)return;keepClip();S.clip.photos[+inp.dataset.clipPhoto]={name:f.name,url:URL.createObjectURL(f)};S.clip.photos=S.clip.photos.filter(Boolean);render()})});
+  $('#clip-len',el).addEventListener('click',function(e){var b=e.target.closest('[data-sec]');if(!b)return;keepClip();S.clip.sec=+b.dataset.sec;render()});
+  $('#clip-model',el).addEventListener('click',function(e){var b=e.target.closest('[data-model]');if(!b)return;keepClip();S.clip.model=b.dataset.model;render()});
+  $('#mv-ratio',el).addEventListener('click',function(e){var b=e.target.closest('[data-ratio]');if(!b)return;keepClip();S.ratio=b.dataset.ratio;render()});
+  $('#mv-style',el).addEventListener('click',function(e){var b=e.target.closest('[data-style]');if(!b)return;keepClip();S.style=b.dataset.style;render()});
+};
+function makeClip(){
+  keepClip();var c=S.clip;
+  if(!c.prompt.trim()){c.error='Say what happens first.';render();return}
+  if(BLOCKED_WORDS.test(c.prompt)){c.error='This kind of content can’t be made. Sexual content and real people without permission aren’t allowed.';render();return}
+  if(c.photos.length&&!c.consent){c.error='Tick the box to confirm you may use these photos.';render();return}
+  c.error=null;
+  S.cast=c.photos.map(function(ph,i){return {id:'p'+(i+1),name:'Person '+(i+1),role:'Lead',desc:'',hue:i?330:28,ver:1,photo:ph.url}});
+  S.shots=[{id:'clip',no:1,scene:'',title:c.prompt.split(/[.,]/)[0].slice(0,40),desc:c.prompt,sec:clipSec(),kind:'close',cast:S.cast.map(function(x){return x.id}),model:c.model,say:''}];
+  S.clipName=S.shots[0].title;
+  startMaking();
+}
+
 R.movie=function(el){
+  if(S.mode==='clip')return R.clip(el);
   var d=S;
   el.innerHTML=head('Make an AI movie','Turn an idea into a short movie for TikTok, Reels or YouTube. You see every step and the price before anything is made.')+
-    stepper('movie')+
+    modeSwitch()+stepper('movie')+
     '<div class="grid g-2-1"><div class="stack">'+
       '<div class="panel"><div class="panel-body stack" style="gap:var(--sp-5)">'+
         '<div class="field"><span class="label">How do you want to start?</span><div class="opts" id="mv-source" style="grid-template-columns:repeat(2,minmax(0,1fr))">'+
@@ -970,6 +1036,7 @@ R.movie=function(el){
       '</div></div>'+
       (S.movies.length?'<div class="panel"><div class="panel-head"><h3>Your movies</h3></div><div class="rows">'+S.movies.map(function(m){return '<a class="row click" href="#/movie/result" style="color:var(--text);text-decoration:none"><div class="thumb"><span class="dur">'+mmss(m.dur)+'</span></div><div class="main"><div class="title">'+esc(m.name)+'</div><div class="meta">'+m.when+' · '+fmt(m.used)+' cr</div></div></a>'}).join('')+'</div></div>':'')+
     '</div></div>';
+  wireMode(el);
   $('#mv-source',el).addEventListener('click',function(e){var b=e.target.closest('[data-src]');if(!b)return;keepIdea();S.source=b.dataset.src;S.ideaError=null;render()});
   var own=$('#mv-own',el);if(own)own.addEventListener('click',function(e){var b=e.target.closest('[data-own]');if(!b)return;keepIdea();S.ownMode=b.dataset.own;render()});
   var ot=$('#mv-own-text',el);if(ot)ot.addEventListener('input',function(){S.ownText=ot.value});
@@ -1115,7 +1182,7 @@ R.shots=function(el){
 R.making=function(el){
   var r=S.run;if(!r){location.hash='#/movie/shots';return}
   var done=S.shots.filter(function(s){return s.state==='done'||s.state==='blocked'}).length,pct=Math.round(done/S.shots.length*100);
-  el.innerHTML=head('Making your movie',GENRES[S.genre].name+' · '+mmss(totalSec())+' · '+S.ratio+' · held '+fmt(r.held)+' cr','<a class="btn" href="#/movie">Back to start</a>')+stepper('making')+
+  el.innerHTML=head(S.mode==='clip'?'Making your video':'Making your movie',(S.mode==='clip'?'Quick clip':GENRES[S.genre].name)+' · '+mmss(totalSec())+' · '+S.ratio+' · held '+fmt(r.held)+' cr','<a class="btn" href="#/movie">Back to start</a>')+(S.mode==='clip'?'':stepper('making'))+
     '<div class="grid g-2-1"><div class="panel"><div class="panel-head"><h3>Working on it</h3><span class="badge accent"><span class="dot live"></span>'+pct+'%</span></div><div class="panel-body stack">'+
       '<div class="steps">'+S.shots.map(function(sh,i){var st=sh.state;return '<div class="step '+(st==='done'?'done':st==='now'?'now':'')+'"'+(st==='blocked'?' style="color:var(--rec)"':'')+'>'+
         ic(st==='done'?'circle-check':st==='now'?'loader-circle':st==='blocked'?'shield-alert':'circle')+'Shot '+(i+1)+' · '+esc(sh.title)+
@@ -1132,8 +1199,8 @@ R.result=function(el){
   var res=S.result||sampleResult();
   var made=res.shots.filter(function(s){return s.state!=='blocked'}),blocked=res.shots.filter(function(s){return s.state==='blocked'});
   var dur=made.reduce(function(a,s){return a+s.sec},0),cur=res.shots[res.at]||made[0];
-  el.innerHTML=head(esc(res.name),GENRES[res.genre].name+' · '+mmss(dur)+' · '+res.ratio+' · '+fmt(res.used)+' cr',
-      '<div class="hstack"><a class="btn" href="#/movie">'+ic('plus')+'New movie</a><button class="btn primary" data-act="toast" data-msg="Downloading '+esc(res.name)+'.mp4">'+ic('download')+'Download MP4</button></div>')+
+  el.innerHTML=head(esc(res.name),(res.clip?'Quick clip':GENRES[res.genre].name)+' · '+mmss(dur)+' · '+res.ratio+' · '+fmt(res.used)+' cr',
+      '<div class="hstack"><a class="btn" href="#/movie">'+ic('plus')+(res.clip?'New video':'New movie')+'</a><button class="btn primary" data-act="toast" data-msg="Downloading '+esc(res.name)+'.mp4">'+ic('download')+'Download MP4</button></div>')+
     (blocked.length?'<div class="note rec" style="margin-bottom:var(--sp-4)">'+ic('shield-alert')+'<div><b>'+blocked.length+' shot was blocked by the safety filter</b> and left out. It wasn’t charged. Change what happens in it and make it again.</div></div>':'')+
     '<div class="grid g-2-1"><div class="stack">'+
       '<div class="viewer'+(res.ratio==='9:16'?' r916':'')+'">'+frame(cur,true)+'<div class="subtitle">'+esc(cur.say||'')+'</div></div>'+
@@ -1190,17 +1257,17 @@ function startMaking(){
   var e=estimate();if(e.short)return;
   S.credits-=e.total;S.run={held:e.total,sub:e.sub,joining:false};
   S.shots.forEach(function(s){s.state='queued'});
-  location.hash='#/movie/making';toast('Started. '+fmt(e.total)+' cr held.');
+  location.hash='#/movie/making';toast('Started. '+fmt(e.total)+' cr held.');S.making=S.mode;
   var i=0;(function next(){
     if(location.hash!=='#/movie/making'&&!S.run)return;
     if(i>0)S.shots[i-1].state=(i-1===4?'blocked':'done');
     if(i<S.shots.length){S.shots[i].state='now';i++;render();setTimeout(next,700);return}
     S.run.joining=true;render();
     setTimeout(function(){
-      var bb=S.shots[4].sec*MODELS[S.shots[4].model].rate,used=S.run.sub-bb;
+      var bb=S.shots[4]?S.shots[4].sec*MODELS[S.shots[4].model].rate:0,used=S.run.sub-bb;
       S.credits+=S.run.held-used;
-      S.result={name:'Monsoon Courier · ep. 2',genre:S.genre,ratio:S.ratio,shots:S.shots.map(function(s){return Object.assign({},s)}),held:S.run.held,used:used,blockedBack:bb,at:0};
-      S.movies.unshift({id:'m'+Date.now(),name:S.result.name,dur:totalSec()-S.shots[4].sec,when:'Just now',used:used});
+      S.result={name:S.mode==='clip'?S.clipName:'Monsoon Courier · ep. 2',clip:S.mode==='clip',genre:S.genre,ratio:S.ratio,shots:S.shots.map(function(s){return Object.assign({},s)}),held:S.run.held,used:used,blockedBack:bb,at:0};
+      S.movies.unshift({id:'m'+Date.now(),name:S.result.name,dur:totalSec()-(S.shots[4]?S.shots[4].sec:0),when:'Just now',used:used});
       S.run=null;location.hash='#/movie/result';toast('Your movie is ready. '+fmt(S.result.held-used)+' cr came back.');
     },1200);
   })();
@@ -1284,6 +1351,8 @@ document.addEventListener('click',function(e){
     case 'use-ai':var ca=castById(a.dataset.id);ca.photo=undefined;delete ca.photo;render();toast(ca.name+' uses an AI face again');break;
     case 'use-budget':S.quality='budget';S.shots.forEach(function(sh){sh.model='draft'});render();toast('Switched to Budget quality');break;
     case 'make':startMaking();break;
+    case 'make-clip':makeClip();break;
+    case 'clip-remove':e.preventDefault();keepClip();S.clip.photos.splice(+a.dataset.i,1);if(!S.clip.photos.length)S.clip.consent=false;render();break;
     case 'remake':var res=S.result||(S.result=sampleResult()),sh=res.shots[+a.dataset.i],cost=sh.sec*MODELS[sh.model].rate,blocked=sh.state==='blocked';
       openModal({title:(blocked?'Edit and make shot ':'Remake shot ')+(+a.dataset.i+1)+'?',ok:'Make it · '+fmt(cost)+' cr',
         body:'<div class="stack">'+(blocked?'<div class="note rec">'+ic('shield-alert')+'<div>The safety filter stopped this shot. Describe it without injuries or other blocked content.</div></div>':'')+
@@ -1295,14 +1364,15 @@ document.addEventListener('click',function(e){
 });
 
 /* ───────────── prototype switcher ───────────── */
-var PROTO=[['start','1 · Idea'],['own','1 · Use my own script (photo of paper)'],['script','2 · Script'],['script-long','2 · Script too long'],['script-error','2 · Script failed (content rules)'],['cast','3 · Characters'],['cast-photo','3 · Characters (one from a photo)'],['shots','4 · Shots and price'],['short','4 · Not enough credits'],['free','Free plan (locked)'],['making','5 · Making'],['result','Result (one shot blocked)'],['blocked-idea','Idea not allowed']];
+var PROTO=[['clip','Quick clip'],['start','1 · Idea'],['own','1 · Use my own script (photo of paper)'],['script','2 · Script'],['script-long','2 · Script too long'],['script-error','2 · Script failed (content rules)'],['cast','3 · Characters'],['cast-photo','3 · Characters (one from a photo)'],['shots','4 · Shots and price'],['short','4 · Not enough credits'],['free','Free plan (locked)'],['making','5 · Making'],['result','Result (one shot blocked)'],['blocked-idea','Idea not allowed']];
 function renderProto(){$('#proto-menu').innerHTML='<div class="lbl faint t-xs">Screens</div>'+PROTO.map(function(p){return '<button role="menuitem" data-act="proto" data-p="'+p[0]+'">'+p[1]+'</button>'}).join('')+'<hr><a role="menuitem" href="app.html#/app" style="display:flex;gap:8px;align-items:center;padding:6px 10px;color:var(--text);text-decoration:none">'+ic('arrow-left')+'Back to the app prototype</a>';lucide.createIcons()}
 function ready(){S.script=sampleScript();S.cast=sampleCast();S.shots=sampleShots().map(function(sh,i){sh.no=i+1;sh.model=autoModel(sh,'balanced');sh.say=SAYS[sh.id]||'';return sh})}
 function protoGo(p){
-  if(p==='start'){S=freshState(4800,'Creator');go('#/movie')}
-  if(p==='blocked-idea'){S=freshState(4800,'Creator');S.idea='A sexual scene between two lovers';go('#/movie');setTimeout(writeScript,50)}
+  if(p==='clip'){S=freshState(4800,'Creator');go('#/movie')}
+  if(p==='start'){S=freshState(4800,'Creator');S.mode='movie';go('#/movie')}
+  if(p==='blocked-idea'){S=freshState(4800,'Creator');S.mode='movie';S.idea='A sexual scene between two lovers';go('#/movie');setTimeout(writeScript,50)}
   if(p==='script'){S=freshState(4800,'Creator');ready();go('#/movie/script')}
-  if(p==='own'){S=freshState(4800,'Creator');S.source='own';S.ownMode='photo';go('#/movie')}
+  if(p==='own'){S=freshState(4800,'Creator');S.mode='movie';S.source='own';S.ownMode='photo';go('#/movie')}
   if(p==='script-long'){S=freshState(4800,'Creator');ready();S.length=30;go('#/movie/script')}
   if(p==='script-error'){S=freshState(4800,'Creator');ready();S.scriptError=true;go('#/movie/script')}
   if(p==='cast'){S=freshState(4800,'Creator');ready();go('#/movie/cast')}

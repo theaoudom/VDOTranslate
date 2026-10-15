@@ -44,8 +44,8 @@ function Making({ m }: { m: PublicMovie }) {
   const total = m.shots.reduce((a, s) => a + s.sec, 0);
   return (
     <section>
-      <PageHead title="Making your movie" sub={`${GENRES[m.settings.genre].name} · ${mmss(total)} · ${m.settings.ratio} · held ${fmt(m.held)} cr`} right={<Link className="btn" href="/app/movie">Back to start</Link>} />
-      <Stepper at="making" movieId={m.id} locked />
+      <PageHead title={m.settings.kind === "clip" ? "Making your video" : "Making your movie"} sub={`${m.settings.kind === "clip" ? "Quick clip" : GENRES[m.settings.genre].name} · ${mmss(total)} · ${m.settings.ratio} · held ${fmt(m.held)} cr`} right={<Link className="btn" href="/app/movie">Back to start</Link>} />
+      {m.settings.kind !== "clip" && <Stepper at="making" movieId={m.id} locked />}
       <div className="grid g-2-1">
         <div className="panel"><div className="panel-head"><h3>Working on it</h3><span className="badge accent"><span className="dot live" />{pct}%</span></div><div className="panel-body stack">
           <div className="steps">
@@ -117,8 +117,8 @@ function Result({ m, onChange }: { m: PublicMovie; onChange: (m: PublicMovie) =>
 
   return (
     <section>
-      <PageHead title={m.name} sub={`${GENRES[m.settings.genre].name} · ${mmss(dur)} · ${m.settings.ratio} · ${fmt(m.used)} cr`}
-        right={<div className="hstack"><Link className="btn" href="/app/movie"><Plus />New movie</Link>{m.hasVideo && <a className="btn primary" href={`/api/movies/${m.id}/files/video?download=1`}><Download />Download MP4</a>}</div>} />
+      <PageHead title={m.name} sub={`${m.settings.kind === "clip" ? "Quick clip" : GENRES[m.settings.genre].name} · ${mmss(dur)} · ${m.settings.ratio} · ${fmt(m.used)} cr`}
+        right={<div className="hstack"><Link className="btn" href="/app/movie"><Plus />{m.settings.kind === "clip" ? "New video" : "New movie"}</Link>{m.hasVideo && <a className="btn primary" href={`/api/movies/${m.id}/files/video?download=1`}><Download />Download MP4</a>}</div>} />
       {blocked.length > 0 && <div className="note rec" style={{ marginBottom: "var(--sp-4)" }}><ShieldAlert /><div><b>{blocked.length} shot{blocked.length > 1 ? "s were" : " was"} blocked by the safety filter</b> and left out. {blocked.length > 1 ? "They weren’t" : "It wasn’t"} charged. Change what happens in {blocked.length > 1 ? "them" : "it"} and make {blocked.length > 1 ? "them" : "it"} again.</div></div>}
       <div className="grid g-2-1">
         <div className="stack">
