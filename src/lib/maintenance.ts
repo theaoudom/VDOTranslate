@@ -1,5 +1,6 @@
 import { SupabaseCreditRepository, SupabaseJobRepository } from "@/data/repositories/SupabaseRepositories";
 import { RecoverStuckJobsUseCase } from "@/domain/use-cases/RecoverStuckJobs";
+import { SupabaseMovieRepository } from "@/data/repositories/SupabaseMovieRepository";
 import { SupabasePaymentRepository } from "@/data/repositories/SupabasePaymentRepository";
 import { adminClient } from "./supabase/admin";
 import { fileStore } from "./uploads";
@@ -30,6 +31,7 @@ export async function recoverStuckJobs() {
 export async function cleanupFiles() {
   const jobs = new SupabaseJobRepository();
   const store = fileStore();
+  const movies = new SupabaseMovieRepository();
   let removed = 0;
 
   const cutoff = new Date(Date.now() - FILE_RETENTION_DAYS * 86400_000);
@@ -49,7 +51,7 @@ export async function cleanupFiles() {
     for (const folder of await store.listFolders(user.prefix)) {
       const id = folder.prefix.slice(user.prefix.length, -1);
       if (!UUID.test(id) || folder.updatedAt.getTime() > unusedBefore) continue;
-      if (await jobs.findById(id)) continue;
+      if ((await jobs.findById(id)) || (await movies.findById(id))) continue; // a job, or an AI movie
       await store.deletePrefix(folder.prefix);
       removed++;
     }

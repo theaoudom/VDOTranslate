@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Coins, CreditCard, FolderOpen, Globe, Languages, LayoutDashboard, LayoutTemplate, LogOut, Menu, Scissors, Settings, SunMoon } from "lucide-react";
+import { Clapperboard, Coins, CreditCard, FolderOpen, Globe, Languages, LayoutDashboard, LayoutTemplate, LogOut, Menu, Scissors, Settings, SunMoon } from "lucide-react";
 import { PLANS, type PlanId } from "@/domain/billing/pricing";
 import { BrandMark } from "../BrandMark";
 import { toggleTheme } from "../ThemeToggle";
@@ -27,6 +27,7 @@ const NAV = [
 const TOOLS = [
   { href: "/app/templates", key: "templates", icon: LayoutTemplate, label: "Templates" },
   { href: "/app/split", key: "split", icon: Scissors, label: "Auto-split" },
+  { href: "/app/movie", key: "movie", icon: Clapperboard, label: "AI movie", badge: "New" },
 ];
 
 function section(path: string) {
@@ -36,6 +37,9 @@ function section(path: string) {
   if (path.startsWith("/app/videos")) return { key: "videos", crumb: "My videos" };
   if (path.startsWith("/app/templates")) return { key: "templates", crumb: "Templates" };
   if (path.startsWith("/app/split")) return { key: "split", crumb: "Auto-split" };
+  if (path === "/app/movie") return { key: "movie", crumb: "AI movie" };
+  const mv = /^\/app\/movie\/[^/]+\/(script|cast|shots|make)/.exec(path);
+  if (mv) return { key: "movie", crumb: "AI movie · " + ({ script: "Script", cast: "Characters", shots: "Shots", make: "Result" } as const)[mv[1] as "script"] };
   return { key: "", crumb: "" };
 }
 
@@ -77,7 +81,7 @@ function Shell({ account, children }: { account: ShellAccount; children: ReactNo
           ))}
           <span className="grp eyebrow">Tools</span>
           {TOOLS.map((n) => (
-            <Link key={n.key} href={n.href} aria-current={key === n.key ? "page" : undefined}><n.icon />{n.label}</Link>
+            <Link key={n.key} href={n.href} aria-current={key === n.key ? "page" : undefined}><n.icon />{n.label}{"badge" in n && n.badge && <span className="badge accent" style={{ marginLeft: "auto" }}>{n.badge}</span>}</Link>
           ))}
         </nav>
         <button className="foot meter" onClick={() => settings("billing")}>

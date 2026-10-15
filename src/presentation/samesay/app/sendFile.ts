@@ -11,20 +11,21 @@ const uploadTarget = () =>
     return { direct: false, userId: "" };
   }));
 
-const ENDPOINT = { video: "/api/uploads", asset: "/api/templates/assets" } as const;
-const FIELD = { video: "video", asset: "file" } as const;
+const ENDPOINT = { video: "/api/uploads", asset: "/api/templates/assets", movie: "/api/movies/files" } as const;
+const FIELD = { video: "video", asset: "file", movie: "file" } as const;
+type Kind = keyof typeof ENDPOINT;
 
 /**
  * Uploads a video (to translate) or an image / clip (for a template) with real progress,
  * then lets the server read it. Resolves with the server's JSON answer.
  */
-export async function sendFile<T>(kind: "video" | "asset", file: File, onProgress: (p: number) => void = () => {}): Promise<T> {
+export async function sendFile<T>(kind: Kind, file: File, onProgress: (p: number) => void = () => {}): Promise<T> {
   const t = await uploadTarget();
   if (!t.direct) return viaServer<T>(kind, file, onProgress);
 
   const ext = /\.[^.]+$/.exec(file.name)?.[0].toLowerCase() ?? "";
   const id = crypto.randomUUID();
-  const pathname = kind === "video" ? `${t.userId}/${id}/original${ext}` : `${t.userId}/assets/${id}${ext}`;
+  const pathname = kind === "video" ? `${t.userId}/${id}/original${ext}` : kind === "movie" ? `${t.userId}/movies/${id}${ext}` : `${t.userId}/assets/${id}${ext}`;
   try {
     await upload(pathname, file, {
       access: "private",
@@ -46,7 +47,7 @@ export async function sendFile<T>(kind: "video" | "asset", file: File, onProgres
   return body as T;
 }
 
-function viaServer<T>(kind: "video" | "asset", file: File, onProgress: (p: number) => void): Promise<T> {
+function viaServer<T>(kind: Kind, file: File, onProgress: (p: number) => void): Promise<T> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     const form = new FormData();

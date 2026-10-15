@@ -21,6 +21,20 @@ function run(args: string[], cwd?: string): Promise<string> {
 }
 
 export class FFmpegMediaRepository implements IMediaRepository {
+  async joinClips(clips: string[], outputPath: string, size: { w: number; h: number }): Promise<void> {
+    const infos = await Promise.all(clips.map((c) => this.probe(c)));
+    const inputs: string[] = [], graph: string[] = [], pairs: string[] = [];
+    clips.forEach((c, i) => {
+      inputs.push("-i", path.resolve(c));
+      graph.push(`[${i}:v]scale=${size.w}:${size.h}:force_original_aspect_ratio=decrease,pad=${size.w}:${size.h}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=24,format=yuv420p[v${i}]`);
+      if (infos[i].hasAudio) graph.push(`[${i}:a]aresample=48000,aformat=channel_layouts=stereo[a${i}]`);
+      else graph.push(`anullsrc=r=48000:cl=stereo,atrim=0:${infos[i].durationSec.toFixed(3)}[a${i}]`);
+      pairs.push(`[v${i}][a${i}]`);
+    });
+    graph.push(`${pairs.join("")}concat=n=${clips.length}:v=1:a=1[v][a]`);
+    await run([...inputs, "-filter_complex", graph.join(";"), "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-preset", "fast", "-crf", "21", "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", path.resolve(outputPath)]);
+  }
+
   findPauses(videoPath: string) {
     return findPausesIn(videoPath);
   }

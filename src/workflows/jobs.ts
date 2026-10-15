@@ -1,4 +1,5 @@
-import { FatalError } from "workflow";
+import { FatalError, sleep } from "workflow";
+import { buildMovies } from "@/lib/movies";
 import { buildContainer } from "@/lib/container";
 import { UserFacingError } from "@/domain/use-cases/ProcessTranslationJob";
 
@@ -120,4 +121,72 @@ export async function splitVideo(jobId: string) {
 export async function exportVideo(jobId: string) {
   "use workflow";
   await exportStep(jobId);
+}
+
+/* ── AI movies ── */
+
+async function movieFrame(id: string, shotId: string) {
+  "use step";
+  return buildMovies().makeFrame(id, shotId);
+}
+async function movieStartShot(id: string, shotId: string) {
+  "use step";
+  return buildMovies().startShot(id, shotId);
+}
+async function movieCheckShot(id: string, shotId: string) {
+  "use step";
+  return buildMovies().checkShot(id, shotId);
+}
+async function movieShotTimeout(id: string, shotId: string) {
+  "use step";
+  return buildMovies().shotTimedOut(id, shotId);
+}
+async function movieJoin(id: string) {
+  "use step";
+  return buildMovies().join(id);
+}
+async function movieFinish(id: string) {
+  "use step";
+  return buildMovies().finish(id);
+}
+async function movieFail(id: string) {
+  "use step";
+  return buildMovies().failMovie(id, "Making the movie didn’t work. All held credits were returned.");
+}
+async function movieFinishRemake(id: string, shotId: string) {
+  "use step";
+  return buildMovies().finishRemake(id, shotId);
+}
+
+/** One shot: first frame, then the video model; waits between checks without holding a function. */
+async function makeShot(id: string, shotId: string) {
+  if (!(await movieFrame(id, shotId))) return;
+  if (!(await movieStartShot(id, shotId))) return;
+  for (let i = 0; i < 90; i++) { // up to ~15 minutes
+    await sleep("10s");
+    if ((await movieCheckShot(id, shotId)) !== "running") return;
+  }
+  await movieShotTimeout(id, shotId);
+}
+
+/** Make every shot of a movie (two at a time), join them, then charge what was made. */
+export async function makeMovie(id: string, shotIds: string[]) {
+  "use workflow";
+  try {
+    for (let i = 0; i < shotIds.length; i += 2) await Promise.all(shotIds.slice(i, i + 2).map((s) => makeShot(id, s)));
+    await movieJoin(id);
+    await movieFinish(id);
+  } catch {
+    await movieFail(id);
+  }
+}
+
+/** Make one shot of a finished movie again. */
+export async function remakeMovieShot(id: string, shotId: string) {
+  "use workflow";
+  try {
+    await makeShot(id, shotId);
+  } finally {
+    await movieFinishRemake(id, shotId);
+  }
 }

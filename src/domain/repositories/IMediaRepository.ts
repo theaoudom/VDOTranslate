@@ -46,6 +46,8 @@ export interface IMediaRepository {
   render(videoPath: string, audioPath: string, outputPath: string, options?: RenderOptions): Promise<void>;
   /** Quiet stretches in the sound track (for cutting between words). */
   findPauses(videoPath: string): Promise<{ start: number; end: number }[]>;
+  /** Clips one after another in one video of the given size (each scaled to fit, silent ones get silence). */
+  joinClips(clips: string[], outputPath: string, size: { w: number; h: number }): Promise<void>;
   /** A part of the video in its own frame (quick encode, exact cut points). */
   cut(videoPath: string, from: number, to: number, outputPath: string): Promise<void>;
 }
