@@ -22,7 +22,7 @@ export const GENRES: Record<MovieGenre, { name: string; icon: string }> = {
   thriller: { name: "Thriller", icon: "eye" },
 };
 export const STYLES: Record<MovieStyle, string> = { cinematic: "Cinematic", realistic: "Realistic", anime: "Anime" };
-export const LENGTHS = [30, 60, 90];
+export const LENGTHS = [10, 15, 30, 60, 90];
 export const TIMES = ["Day", "Night", "Morning", "Evening"];
 
 export interface ModelInfo {
@@ -142,6 +142,25 @@ export function autoModel(sh: Pick<Shot, "kind" | "cast">, quality: MovieQuality
   if (sh.kind === "action") return "action";
   if (sh.kind === "close" && sh.cast.length) return "lead";
   return "standard";
+}
+
+/**
+ * Lengthen shots (to lengths their model can make) until they fill about the chosen
+ * movie length; the script writer often plans a little short.
+ */
+export function fillLength<T extends Pick<Shot, "sec" | "model">>(shots: T[], target: number): T[] {
+  const out = shots.map((s) => ({ ...s }));
+  const total = () => out.reduce((a, s) => a + s.sec, 0);
+  for (let guard = 0; guard < 50 && total() < target * 0.95; guard++) {
+    // grow the shortest shot that can still grow without passing the target
+    const grow = out
+      .map((s) => ({ s, next: MODELS[s.model].durations.find((d) => d > s.sec) }))
+      .filter((x) => x.next && total() - x.s.sec + x.next <= target * 1.05)
+      .sort((a, b) => a.s.sec - b.s.sec)[0];
+    if (!grow) break;
+    grow.s.sec = grow.next!;
+  }
+  return out;
 }
 
 /** The nearest length the model can make. */

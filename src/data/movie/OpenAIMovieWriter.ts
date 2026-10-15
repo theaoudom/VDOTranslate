@@ -79,7 +79,8 @@ async function chat<T>(model: string, messages: unknown[], schema: object): Prom
 }
 
 function brief(s: MovieSettings) {
-  return `Kind: ${GENRES[s.genre].name}. Look: ${STYLES[s.style]}. Frame: ${s.ratio}. Length: about ${s.length} seconds in total.`;
+  const shape = s.length <= 15 ? " Keep it to ONE scene and 1-2 shots." : s.length <= 30 ? " Keep it to 1-3 scenes." : "";
+  return `Kind: ${GENRES[s.genre].name}. Look: ${STYLES[s.style]}. Frame: ${s.ratio}. Length: about ${s.length} seconds in total; the shot seconds should add up to close to ${s.length}.${shape}`;
 }
 
 /** Turns the model's answer into the app's movie: ids, links between shots, scenes and characters. */

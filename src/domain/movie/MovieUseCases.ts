@@ -3,7 +3,7 @@ import type { ICreditRepository } from "@/domain/repositories/ICreditRepository"
 import type { IFileStore } from "@/domain/repositories/IFileStore";
 import type { IMediaRepository } from "@/domain/repositories/IMediaRepository";
 import {
-  autoModel, BLOCKED_WORDS, estimateMovie, fitDuration, MODELS, MOVIE_COST, PHOTO_CONSENT, sanitizeScript, shotCost, STYLES,
+  autoModel, BLOCKED_WORDS, estimateMovie, fillLength, fitDuration, MODELS, MOVIE_COST, PHOTO_CONSENT, sanitizeScript, shotCost, STYLES,
   type Character, type Movie, type MovieQuality, type MovieSettings, type Scene, type Shot,
 } from "./Movie";
 import { BlockedContentError, type IMovieMedia, type IMovieRepository, type IMovieWriter, type OwnScript, type WrittenMovie } from "./ports";
@@ -56,13 +56,13 @@ export class MovieUseCases {
   private async check(text: string) {
     return !BLOCKED_WORDS.test(text) && (await this.writer.allowed(text));
   }
-  private toMovie(w: WrittenMovie, quality: MovieQuality) {
+  private toMovie(w: WrittenMovie, quality: MovieQuality, length: number) {
     const cast: Character[] = w.cast.map((c) => ({ ...c, hue: hue(c.name), ver: 1, portrait: null, photo: null, consent: null }));
     const shots: Shot[] = w.shots.map((sh) => {
       const model = autoModel(sh, quality);
       return { ...sh, model, sec: fitDuration(sh.sec, model), state: "planned" };
     });
-    return { cast, shots };
+    return { cast, shots: fillLength(shots, length) };
   }
 
   /* ── 1. Idea or own script ── */
@@ -77,7 +77,7 @@ export class MovieUseCases {
     const r = await this.paid(userId, cost, own ? "AI movie · read my script" : "AI movie · write the script", "AI movie", () => (own ? this.writer.read(own, settings) : this.writer.write(settings)));
     if (!r.ok) return r;
     if (!r.value.script.length || !r.value.shots.length) return fail(422, "We couldn’t make a script from this. Change it and try again.");
-    const { cast, shots } = this.toMovie(r.value, "balanced");
+    const { cast, shots } = this.toMovie(r.value, "balanced", settings.length);
     const movie = await this.movies.create({ userId, name: r.value.name, settings: { ...settings, fromOwn: Boolean(own) }, script: r.value.script, cast, shots, quality: "balanced" });
     return { ok: true, movie };
   }
@@ -112,7 +112,7 @@ export class MovieUseCases {
     const changes = tones.length ? `\nMake it: ${tones.join(", ")}.` : "";
     const r = await this.paid(userId, MOVIE_COST.script, "AI movie · rewrite the script", m.name, () => this.writer.write({ ...m.settings, idea: idea + changes }));
     if (!r.ok) return r;
-    const { cast, shots } = this.toMovie(r.value, m.quality === "custom" ? "balanced" : m.quality);
+    const { cast, shots } = this.toMovie(r.value, m.quality === "custom" ? "balanced" : m.quality, m.settings.length);
     return { ok: true, movie: await this.movies.update(id, { script: r.value.script, cast, shots, settings: { ...m.settings, fromOwn: false, shotsStale: false } }) };
   }
 
@@ -123,7 +123,7 @@ export class MovieUseCases {
     if (!m.settings.shotsStale || m.status !== "draft") return { ok: true, movie: m };
     try {
       const planned = await this.writer.planShots(m.script, m.cast, m.settings);
-      const shots: Shot[] = planned.map((sh) => { const model = autoModel(sh, m.quality); return { ...sh, model, sec: fitDuration(sh.sec, model), state: "planned" }; });
+      const shots: Shot[] = fillLength(planned.map((sh) => { const model = autoModel(sh, m.quality); return { ...sh, model, sec: fitDuration(sh.sec, model), state: "planned" as const }; }), m.settings.length);
       return { ok: true, movie: await this.movies.update(id, { shots, settings: { ...m.settings, shotsStale: false } }) };
     } catch (e) {
       console.error("[movie] plan shots", e);

@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- prototype: micro-movie (named "AI movie" in the app) · status: confirmed 2026-10-15 · screens: idea (+ romance note, own script: paste / file / photo of paper), script editor (scene changes, lines, length; + failed), characters (+ use a photo with consent), shots & price (+ not enough credits), making, result (one shot blocked), idea not allowed, Free plan locked -->
+<!-- prototype: micro-movie (named "AI movie" in the app) · status: confirmed 2026-10-15 · revised 2026-10-15: lengths 0:10 and 0:15 added · screens: idea (+ romance note, own script: paste / file / photo of paper), script editor (scene changes, lines, length; + failed), characters (+ use a photo with consent), shots & price (+ not enough credits), making, result (one shot blocked), idea not allowed, Free plan locked -->
 <html lang="en" data-theme="light">
 <head>
 <meta charset="utf-8">
@@ -946,7 +946,7 @@ R.movie=function(el){
           (d.ideaError?'<span class="hint err">'+d.ideaError+'</span>':'<span class="hint">One or two sentences is enough. We write the script, the characters and the shots for you to check.</span>')+'</div>'
         :ownScriptBlock(d))+
         '<div class="two">'+
-          '<div class="field"><span class="label">Length</span><div class="seg" id="mv-len">'+[30,60,90].map(function(s){return '<button data-len="'+s+'" aria-pressed="'+(d.length===s)+'">'+mmss(s)+'</button>'}).join('')+'</div></div>'+
+          '<div class="field"><span class="label">Length</span><div class="seg" id="mv-len">'+[10,15,30,60,90].map(function(s){return '<button data-len="'+s+'" aria-pressed="'+(d.length===s)+'">'+mmss(s)+'</button>'}).join('')+'</div></div>'+
           '<div class="field"><span class="label">Frame</span><div class="seg" id="mv-ratio">'+['9:16','16:9'].map(function(r){return '<button data-ratio="'+r+'" aria-pressed="'+(d.ratio===r)+'">'+r+(r==='9:16'?' · phone':' · wide')+'</button>'}).join('')+'</div></div>'+
         '</div>'+
         '<div class="field"><span class="label">Look</span><div class="seg" id="mv-style">'+Object.keys(STYLES).map(function(k){return '<button data-style="'+k+'" aria-pressed="'+(d.style===k)+'">'+STYLES[k]+'</button>'}).join('')+'</div></div>'+
