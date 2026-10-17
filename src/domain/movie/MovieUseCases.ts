@@ -4,7 +4,7 @@ import type { IFileStore } from "@/domain/repositories/IFileStore";
 import type { IMediaRepository } from "@/domain/repositories/IMediaRepository";
 import {
   CLIP_CONSENT, CLIP_MODELS, type ModelTier,
-  autoModel, BLOCKED_WORDS, estimateMovie, fillLength, fitDuration, MODELS, MOVIE_COST, PHOTO_CONSENT, sanitizeScript, shotCost, STYLES,
+  autoModel, BLOCKED_WORDS, remakeModels, remakeSec, estimateMovie, fillLength, fitDuration, MODELS, MOVIE_COST, PHOTO_CONSENT, sanitizeScript, shotCost, STYLES,
   type Character, type Movie, type MovieQuality, type MovieSettings, type Scene, type Shot,
 } from "./Movie";
 import { BlockedContentError, type IMovieMedia, type IMovieRepository, type IMovieWriter, type OwnScript, type WrittenMovie } from "./ports";
@@ -411,16 +411,21 @@ export class MovieUseCases {
   }
 
   /* ── Result: make one shot again ── */
-  async startRemake(userId: string, id: string, shotId: string, desc: string): Promise<MovieResult> {
+  /** `model` picks another model for it (the shot's own model when left out). */
+  async startRemake(userId: string, id: string, shotId: string, desc: string, model?: ModelTier): Promise<MovieResult> {
     const m = await this.owned(userId, id);
     const sh = m?.shots.find((s) => s.id === shotId);
     if (!m || !sh) return fail(404, "Shot not found.");
     if (m.status !== "done" || m.shots.some((s) => s.state === "queued" || s.state === "frame" || s.state === "making")) return fail(409, "Wait until the movie is finished.");
     const text = desc.trim().slice(0, 600) || sh.desc;
     if (!(await this.check(text))) return fail(422, NOT_ALLOWED);
-    const cost = shotCost(sh);
+    const tier = model ?? sh.model;
+    if (tier !== sh.model && !remakeModels(m).includes(tier)) return fail(400, "This model can’t be used here.");
+    const sec = tier === sh.model ? sh.sec : remakeSec(m, sh, tier);
+    const cost = shotCost({ sec, model: tier });
     if (!(await this.credits.hold(userId, cost, `AI movie · remake shot`, m.name))) return fail(402, `Not enough credits. You need ${cost}.`);
-    const shots = m.shots.map((s) => (s.id === shotId ? { ...s, desc: text, state: "queued" as const, frame: null, requestId: null, error: null } : s));
+    const remake = { model: sh.model, sec: sh.sec, held: cost };
+    const shots = m.shots.map((s) => (s.id === shotId ? { ...s, desc: text, model: tier, sec, remake, state: "queued" as const, frame: null, requestId: null, error: null } : s));
     return { ok: true, movie: await this.movies.update(id, { shots }) };
   }
 
@@ -428,10 +433,11 @@ export class MovieUseCases {
   async finishRemake(id: string, shotId: string) {
     const m = await this.load(id);
     const sh = m.shots.find((s) => s.id === shotId)!;
-    const cost = shotCost(sh);
+    const cost = sh.remake?.held ?? shotCost(sh);
     const made = sh.state === "done";
-    if (made) await this.join(id);
-    else if (sh.file) await this.setShot(id, shotId, { state: "done", error: "The new version couldn’t be made, so the old shot stays. Your credits came back." });
+    if (made) { await this.setShot(id, shotId, { remake: null }); await this.join(id); }
+    else if (sh.file) await this.setShot(id, shotId, { state: "done", model: sh.remake?.model ?? sh.model, sec: sh.remake?.sec ?? sh.sec, remake: null, error: "The new version couldn’t be made, so the old shot stays. Your credits came back." });
+    else await this.setShot(id, shotId, { remake: null });
     await this.credits.settle(m.userId, cost, made ? cost : 0, m.name);
     const fresh = await this.load(id);
     await this.movies.update(id, { used: fresh.used + (made ? cost : 0) });

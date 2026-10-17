@@ -86,6 +86,8 @@ export interface Shot {
   /** model request while it's being made */
   requestId?: string | null;
   error?: string | null;
+  /** while a remake runs: the old shot's model and length (put back if it fails) and what was held */
+  remake?: { model: ModelTier; sec: number; held: number } | null;
 }
 
 export interface MovieSettings {
@@ -169,6 +171,11 @@ export function fillLength<T extends Pick<Shot, "sec" | "model">>(shots: T[], ta
 export function fitDuration(sec: number, tier: ModelTier) {
   return MODELS[tier].durations.reduce((best, d) => (Math.abs(d - sec) < Math.abs(best - sec) ? d : best));
 }
+
+/** Models a shot can be remade with: the Quick clip ones for a clip, all of them in a movie. */
+export const remakeModels = (m: Pick<Movie, "settings">) => (m.settings.kind === "clip" ? CLIP_MODELS : MODEL_ORDER);
+/** Length of a remade shot: a clip aims for its chosen length again, a movie shot for its own. */
+export const remakeSec = (m: Pick<Movie, "settings">, sh: Pick<Shot, "sec">, tier: ModelTier) => fitDuration(m.settings.kind === "clip" ? m.settings.length : sh.sec, tier);
 
 export const shotCost = (sh: Pick<Shot, "sec" | "model">) => sh.sec * MODELS[sh.model].rate;
 

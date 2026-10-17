@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Circle, CircleCheck, Download, Info, LayoutTemplate, Languages, LoaderCircle, OctagonAlert, Pencil, Plus, RefreshCw, Scissors, ShieldAlert } from "lucide-react";
-import { estimateMovie, GENRES, MODELS, shotCost, type PublicMovie } from "@/domain/movie/Movie";
+import { estimateMovie, GENRES, MODELS, remakeModels, remakeSec, shotCost, type ModelTier, type PublicMovie } from "@/domain/movie/Movie";
 import { Modal } from "../../Modal";
 import { useToast } from "../../Toast";
 import { CostTable } from "../bits";
@@ -110,7 +110,7 @@ function Result({ m, onChange }: { m: PublicMovie; onChange: (m: PublicMovie) =>
   const toast = useToast();
   const video = useRef<HTMLVideoElement>(null);
   const [at, setAt] = useState(0);
-  const [remake, setRemake] = useState<{ i: number; desc: string } | null>(null);
+  const [remake, setRemake] = useState<{ i: number; desc: string; model: ModelTier } | null>(null);
   const [shape, setShape] = useState(m.settings.ratio === "9:16" ? "r916" : "");
   const made = m.shots.filter((s) => s.state === "done");
   const blocked = m.shots.filter((s) => s.state === "blocked" || s.state === "failed");
@@ -118,6 +118,12 @@ function Result({ m, onChange }: { m: PublicMovie; onChange: (m: PublicMovie) =>
   const blockedBack = blocked.reduce((a, s) => a + shotCost(s), 0);
   const bufferBack = Math.max(0, m.held - m.used - blockedBack);
   const hueOf = (sh: Shot) => m.cast.find((c) => c.id === sh.cast[0])?.hue ?? 200;
+
+  /** Length and price of a remake with this model. */
+  function remakeCost(sh: Shot, tier: ModelTier) {
+    const sec = tier === sh.model ? sh.sec : remakeSec(m, sh, tier);
+    return { sec, cost: shotCost({ sec, model: tier }) };
+  }
 
   /** Jump the player to the start of a shot. */
   function watch(i: number) {
@@ -131,8 +137,8 @@ function Result({ m, onChange }: { m: PublicMovie; onChange: (m: PublicMovie) =>
     if (!remake) return;
     const sh = m.shots[remake.i];
     try {
-      onChange(await api(`/api/movies/${m.id}/remake`, "POST", { shotId: sh.id, desc: remake.desc }));
-      toast(`Making shot ${remake.i + 1} again · ${fmt(shotCost(sh))} cr held`);
+      onChange(await api(`/api/movies/${m.id}/remake`, "POST", { shotId: sh.id, desc: remake.desc, model: remake.model }));
+      toast(`Making shot ${remake.i + 1} again · ${fmt(remakeCost(sh, remake.model).cost)} cr held`);
     } catch (e) { toast((e as Error).message, true); }
     setRemake(null);
   }
@@ -163,7 +169,7 @@ function Result({ m, onChange }: { m: PublicMovie; onChange: (m: PublicMovie) =>
                       <div className="meta">{busy ? <span className="hstack" style={{ gap: 4 }}><LoaderCircle style={{ width: 12, height: 12 }} />Making again…</span> : b ? <span style={{ color: "var(--rec)" }}>Blocked · not charged</span> : `${mmss(sh.sec)} · ${MODELS[sh.model].model}`}</div>
                       {sh.error && sh.state === "done" && <div className="meta">{sh.error}</div>}
                     </div>
-                    <button className="btn sm" disabled={busy || m.shots.some(busyShot)} onClick={() => setRemake({ i, desc: sh.desc })}>{b ? <Pencil /> : <RefreshCw />}{b ? "Edit and make" : "Remake"} · {fmt(shotCost(sh))} cr</button>
+                    <button className="btn sm" disabled={busy || m.shots.some(busyShot)} onClick={() => setRemake({ i, desc: sh.desc, model: sh.model })}>{b ? <Pencil /> : <RefreshCw />}{b ? "Edit and make" : "Remake"} · {fmt(shotCost(sh))} cr</button>
                   </div>
                 );
               })}
@@ -187,13 +193,21 @@ function Result({ m, onChange }: { m: PublicMovie; onChange: (m: PublicMovie) =>
         </div>
       </div>
       {remake && (() => {
-        const sh = m.shots[remake.i], b = sh.state === "blocked" || sh.state === "failed", cost = shotCost(sh);
+        const sh = m.shots[remake.i], b = sh.state === "blocked" || sh.state === "failed", tier = MODELS[remake.model], { sec, cost } = remakeCost(sh, remake.model);
         return (
           <Modal title={`${b ? "Edit and make shot " : "Remake shot "}${remake.i + 1}?`} okLabel={`Make it · ${fmt(cost)} cr`} onOk={doRemake} onClose={() => setRemake(null)}>
             <div className="stack">
               {b && <div className="note rec"><ShieldAlert /><div>The safety filter stopped this shot. Describe it without injuries or other blocked content.</div></div>}
               <div className="field"><label className="label" htmlFor="rm-desc">What happens</label><textarea className="textarea" id="rm-desc" rows={3} value={remake.desc} onChange={(e) => setRemake({ ...remake, desc: e.target.value })} /></div>
-              <CostTable lines={[{ label: MODELS[sh.model].model, detail: `${sh.sec} s × ${MODELS[sh.model].rate} cr`, credits: cost }]} total={cost} label="Price" />
+              <div className="field"><span className="label">Quality</span>{sh.cast.length > 0 && <span className="hint">With photos, Standard and Lead face keep faces closest to the photos.</span>}
+                <div className="opts" style={{ gridTemplateColumns: "repeat(2,minmax(0,1fr))" }}>
+                  {remakeModels(m).map((k) => {
+                    const mm = MODELS[k], c = remakeCost(sh, k);
+                    return <button key={k} type="button" className="opt" aria-pressed={remake.model === k} onClick={() => setRemake({ ...remake, model: k })}><span className="t">{mm.name}{k === sh.model && <span className="badge">Now</span>}{k === "lead" && <span className="badge ok">Best faces</span>}</span><span className="d">{mm.desc}</span><span className="p">{c.sec} s · {fmt(c.cost)} cr</span></button>;
+                  })}
+                </div>
+              </div>
+              <CostTable lines={[{ label: tier.model, detail: `${sec} s × ${tier.rate} cr`, credits: cost }]} total={cost} label="Price" />
               <p className="faint t-xs">Only this shot is made again. The rest of the movie stays as it is.</p>
             </div>
           </Modal>

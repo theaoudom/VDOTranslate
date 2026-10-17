@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { start } from "workflow/api";
-import { toPublicMovie } from "@/domain/movie/Movie";
+import { toPublicMovie, type ModelTier } from "@/domain/movie/Movie";
 import { buildMovies } from "@/lib/movies";
 import { requireUser } from "@/lib/session";
 import { makeMovie, remakeMovieShot } from "@/workflows/jobs";
@@ -13,7 +13,7 @@ export const maxDuration = 300;
  * portrait { characterId }                 new AI portrait (2 cr)
  * photo    { characterId, key, consent }   use the user's photo   · DELETE photo → back to an AI face
  * make                                     hold the price and make the movie
- * remake   { shotId, desc }                make one shot again
+ * remake   { shotId, desc, model? }        make one shot again, optionally with another model
  */
 export async function POST(req: NextRequest, { params }: { params: { id: string; action: string } }) {
   const auth = await requireUser();
@@ -45,7 +45,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string;
       break;
     }
     case "remake": {
-      r = await movies.startRemake(uid, id, String(body?.shotId ?? ""), String(body?.desc ?? ""));
+      r = await movies.startRemake(uid, id, String(body?.shotId ?? ""), String(body?.desc ?? ""), body?.model ? (String(body.model) as ModelTier) : undefined);
       if (r.ok) await start(remakeMovieShot, [id, String(body.shotId)]);
       break;
     }
