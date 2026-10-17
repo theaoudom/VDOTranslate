@@ -21,7 +21,7 @@ export function MovieStart({ credits, movies, clipFrom }: { credits: number; mov
   const router = useRouter();
   const toast = useToast();
   const openSettings = useOpenSettings();
-  const [mode, setMode] = useState<MakeMode>("clip");
+  const [mode, setMode] = useState<MakeMode>(clipFrom ? "clip" : "template");
   const [source, setSource] = useState<"ai" | "own">("ai");
   const [genre, setGenre] = useState<MovieGenre>("action");
   const [idea, setIdea] = useState("");
@@ -73,12 +73,22 @@ export function MovieStart({ credits, movies, clipFrom }: { credits: number; mov
     }
   }
 
+  if (mode === "template") {
+    return (
+      <section>
+        <PageHead title="Make an AI video" sub="Pick a template, add your photos, and get a short video of you. You see the price before anything is made." />
+        <ModeSwitch mode={mode} onChange={setMode} />
+        <ClipForm key="template" credits={credits} template />
+      </section>
+    );
+  }
+
   if (mode === "clip") {
     return (
       <section>
         <PageHead title="Make an AI video" sub="Upload who’s in it, say what happens, and get one short video. You see the price before anything is made." />
         <ModeSwitch mode={mode} onChange={setMode} />
-        <ClipForm credits={credits} from={clipFrom} />
+        <ClipForm key="clip" credits={credits} from={clipFrom} />
       </section>
     );
   }

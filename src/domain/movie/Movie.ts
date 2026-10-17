@@ -208,7 +208,17 @@ export const scriptSec = (script: Scene[]) => script.reduce((a, sc) => a + scene
 /** Quick clip: lengths offered and the models that make them. */
 export const CLIP_LENGTHS = [5, 10];
 export const CLIP_MODELS: ModelTier[] = ["draft", "standard", "lead", "cinematic"];
-export const CLIP_CONSENT = "These are me, or the people in the photos agreed to be in this video. They’re adults and not famous people.";
+/** Quick clip: ready-made scenes. Picking one fills in what happens, length, frame and look. */
+export interface ClipScene { id: string; name: string; desc: string; prompt: string; sec: number; ratio: MovieRatio; style: MovieStyle; people: number; swatch: string; preview: string; poster: string }
+export const CLIP_SCENES: ClipScene[] = [
+  {
+    id: "sunset-kiss", name: "Sunset beach kiss", desc: "A couple on the sand at golden hour, waves behind them.", people: 2, sec: 10, ratio: "9:16", style: "realistic",
+    prompt: "A loving couple sits close together on the sand of a beach at sunset, golden light and soft waves behind them. She holds a glass of red wine, he wraps his arms around her, and they share a slow, tender kiss. Warm, romantic, gentle camera push-in.",
+    swatch: "linear-gradient(180deg,#f6b04a 0%,#f08a4b 45%,#5b7fa6 70%,#d9b98a 100%)",
+    preview: "/templates/sunset-kiss.mp4", poster: "/templates/sunset-kiss.jpg",
+  },
+];
+export const CLIP_CONSENT ="These are me, or the people in the photos agreed to be in this video. They’re adults and not famous people.";
 
 /** Words that are never made into a movie (checked before the AI moderation too). */
 export const BLOCKED_WORDS = /\b(sex|sexual|nude|naked|porn|nsfw|erotic)\b/i;

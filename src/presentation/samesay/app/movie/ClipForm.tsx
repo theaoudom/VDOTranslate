@@ -2,8 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Clapperboard, Heart, LoaderCircle, OctagonAlert, ShieldCheck, WandSparkles } from "lucide-react";
-import { CLIP_CONSENT, CLIP_LENGTHS, CLIP_MODELS, fitDuration, MODELS, MOVIE_COST, STYLES, type ModelTier, type MovieRatio, type MovieStyle } from "@/domain/movie/Movie";
+import { Clapperboard, Heart, Images, LoaderCircle, OctagonAlert, ShieldCheck, WandSparkles } from "lucide-react";
+import { CLIP_CONSENT, CLIP_LENGTHS, CLIP_SCENES, CLIP_MODELS, fitDuration, MODELS, MOVIE_COST, STYLES, type ModelTier, type MovieRatio, type MovieStyle } from "@/domain/movie/Movie";
 import { useToast } from "../../Toast";
 import { CostTable } from "../bits";
 import { fmt } from "../format";
@@ -11,14 +11,15 @@ import { sendFile } from "../sendFile";
 import { useOpenSettings } from "../Settings";
 import { api } from "./parts";
 
-export type MakeMode = "clip" | "movie";
+export type MakeMode = "template" | "clip" | "movie";
 
-/** "What do you want to make?": Quick clip or Movie. */
+/** "What do you want to make?": Template, Quick clip or Movie. */
 export function ModeSwitch({ mode, onChange }: { mode: MakeMode; onChange: (m: MakeMode) => void }) {
   return (
     <div className="panel" style={{ marginBottom: "var(--sp-4)" }}><div className="panel-body"><div className="field">
       <span className="label">What do you want to make?</span>
-      <div className="opts" style={{ gridTemplateColumns: "repeat(2,minmax(0,1fr))" }}>
+      <div className="opts">
+        <button className="opt" aria-pressed={mode === "template"} onClick={() => onChange("template")}><span className="t"><Images />Template</span><span className="d">Pick a ready-made video and add your photos. Nothing to write.</span><span className="p">from {fmt(4 * MODELS.draft.rate)} cr</span></button>
         <button className="opt" aria-pressed={mode === "clip"} onClick={() => onChange("clip")}><span className="t"><WandSparkles />Quick clip</span><span className="d">One short video from your photos and one sentence.</span><span className="p">from {fmt(4 * MODELS.draft.rate)} cr</span></button>
         <button className="opt" aria-pressed={mode === "movie"} onClick={() => onChange("movie")}><span className="t"><Clapperboard />Movie</span><span className="d">A story with scenes, characters and shots.</span><span className="p">from about {fmt(10 * MODELS.draft.rate * 1.1 + MOVIE_COST.script)} cr</span></button>
       </div>
@@ -45,8 +46,9 @@ export interface ClipStart { prompt: string; photos: Photo[]; sec: number; model
 
 const DRAFT_KEY = "samesay-clip-draft";
 
-/** Quick clip: who's in it (optional photos), what happens, length, frame, look, quality. */
-export function ClipForm({ credits, from }: { credits: number; from?: ClipStart | null }) {
+/** Quick clip: who's in it (optional photos), what happens, length, frame, look, quality.
+ *  As a template: pick a ready-made scene, add its photos, choose quality. Nothing to write. */
+export function ClipForm({ credits, from, template = false }: { credits: number; from?: ClipStart | null; template?: boolean }) {
   const router = useRouter();
   const toast = useToast();
   const openSettings = useOpenSettings();
@@ -57,20 +59,23 @@ export function ClipForm({ credits, from }: { credits: number; from?: ClipStart 
   const [sec, setSec] = useState(from?.sec ?? 10);
   const [ratio, setRatio] = useState<MovieRatio>(from?.ratio ?? "9:16");
   const [style, setStyle] = useState<MovieStyle>(from?.style ?? "cinematic");
-  const [model, setModel] = useState<ModelTier>(from?.model ?? "draft");
+  const [model, setModel] = useState<ModelTier>(from?.model ?? (template ? "standard" : "draft"));
+  const [sceneId, setSceneId] = useState(CLIP_SCENES[0].id);
+  const scene = template ? CLIP_SCENES.find((c) => c.id === sceneId)! : null;
 
   // keep what was typed if the page is closed before making it (this browser only)
   useEffect(() => {
-    if (from) return;
+    if (from || template) return;
     try { const saved = localStorage.getItem(DRAFT_KEY); if (saved) setPrompt(saved); } catch {}
-  }, [from]);
+  }, [from, template]);
   useEffect(() => {
+    if (template) return;
     try { if (prompt.trim()) localStorage.setItem(DRAFT_KEY, prompt); else localStorage.removeItem(DRAFT_KEY); } catch {}
-  }, [prompt]);
+  }, [prompt, template]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const real = fitDuration(sec, model), m = MODELS[model], sub = real * m.rate, buf = Math.ceil(sub * MOVIE_COST.buffer), total = sub + buf, short = total > credits;
+  const real = fitDuration(scene?.sec ?? sec, model), m = MODELS[model], sub = real * m.rate, buf = Math.ceil(sub * MOVIE_COST.buffer), total = sub + buf, short = total > credits;
 
   async function addPhoto(i: number, f: File | undefined) {
     if (!f) return;
@@ -86,12 +91,14 @@ export function ClipForm({ credits, from }: { credits: number; from?: ClipStart 
 
   async function make() {
     setError(null);
-    if (!prompt.trim()) { setError("Say what happens first."); return; }
+    if (scene && photos.length < scene.people) { setError(scene.people === 2 ? "Add both photos first." : "Add a photo first."); return; }
+    if (!scene && !prompt.trim()) { setError("Say what happens first."); return; }
     if (photos.length && !consent) { setError("Tick the box to confirm you may use these photos."); return; }
     setBusy(true);
     try {
-      const r = await api("/api/movies/clip", "POST", { prompt, photos: photos.map((p) => p.key), consent, sec, model, ratio, style });
-      try { localStorage.removeItem(DRAFT_KEY); } catch {}
+      const keys = photos.map((p) => p.key);
+      const r = await api("/api/movies/clip", "POST", scene ? { scene: scene.id, photos: keys, consent, model } : { prompt, photos: keys, consent, sec, model, ratio, style });
+      if (!scene) try { localStorage.removeItem(DRAFT_KEY); } catch {}
       toast(`Started. ${fmt(r.held)} cr held.`);
       router.push(`/app/movie/${r.id}/make`);
       router.refresh();
@@ -102,8 +109,24 @@ export function ClipForm({ credits, from }: { credits: number; from?: ClipStart 
     <div className="grid g-2-1">
       <div className="stack">
         <div className="panel"><div className="panel-body stack" style={{ gap: "var(--sp-5)" }}>
+          {scene && (
+            <div className="field">
+              <span className="label">1. Pick a template</span>
+              <div className="tpl-grid">
+                {CLIP_SCENES.map((c) => (
+                  <button key={c.id} className="tpl" aria-pressed={c.id === scene.id} onClick={() => { setSceneId(c.id); setError(null); }} style={{ background: c.swatch }}>
+                    <video className="tpl-video" src={c.preview} poster={c.poster} autoPlay muted loop playsInline preload="metadata" aria-hidden />
+                    <span className="tpl-meta"><b>{c.name}</b><span>{c.people} {c.people === 1 ? "photo" : "photos"} · {c.sec} s</span></span>
+                  </button>
+                ))}
+              </div>
+              <span className="hint">{scene.desc}</span>
+            </div>
+          )}
           <div className="field">
-            <span className="label">Who’s in it <span className="faint t-xs" style={{ fontWeight: 400 }}>· optional, up to 2 people</span></span>
+            {scene
+              ? <span className="label">2. Add {scene.people === 2 ? "both people’s photos" : "your photo"}</span>
+              : <span className="label">Who’s in it <span className="faint t-xs" style={{ fontWeight: 400 }}>· optional, up to 2 people</span></span>}
             <div className="two">
               {[0, 1].map((i) => {
                 const ph = photos[i];
@@ -123,8 +146,10 @@ export function ClipForm({ credits, from }: { credits: number; from?: ClipStart 
             </div>
             {photos.length
               ? <label className="check" style={{ alignItems: "flex-start" }}><input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} /><span>{CLIP_CONSENT}</span></label>
-              : <span className="hint">No photos? We make up the people from your words.</span>}
+              : <span className="hint">{scene ? (scene.people === 2 ? "Person 1 and Person 2 · one face each, good light." : "One face, good light.") : "No photos? We make up the people from your words."}</span>}
+            {scene && error && <span className="hint err">{error}</span>}
           </div>
+          {!scene && <>
           <div className="field">
             <label className="label" htmlFor="clip-prompt">What happens</label>
             <textarea className={"textarea" + (error ? " invalid" : "")} id="clip-prompt" rows={4} placeholder="Who does what, where? e.g. They dance in the rain on a city street at night." value={prompt} onChange={(e) => setPrompt(e.target.value)} />
@@ -140,12 +165,13 @@ export function ClipForm({ credits, from }: { credits: number; from?: ClipStart 
             <div className="field"><span className="label">Frame</span><div className="seg">{(["9:16", "16:9"] as MovieRatio[]).map((r) => <button key={r} aria-pressed={ratio === r} onClick={() => setRatio(r)}>{r}{r === "9:16" ? " · phone" : " · wide"}</button>)}</div></div>
           </div>
           <div className="field"><span className="label">Look</span><div className="seg">{(Object.keys(STYLES) as MovieStyle[]).map((k) => <button key={k} aria-pressed={style === k} onClick={() => setStyle(k)}>{STYLES[k]}</button>)}</div></div>
+          </>}
           <div className="field">
-            <span className="label">Quality</span>
+            <span className="label">{scene ? "3. Quality" : "Quality"}</span>
             {photos.length > 0 && <span className="hint">With photos, Standard and Lead face keep faces closest to the photos.</span>}
             <div className="opts" style={{ gridTemplateColumns: "repeat(2,minmax(0,1fr))" }}>
               {CLIP_MODELS.map((k) => {
-                const mm = MODELS[k], s2 = fitDuration(sec, k);
+                const mm = MODELS[k], s2 = fitDuration(scene?.sec ?? sec, k);
                 return <button key={k} className="opt" aria-pressed={model === k} onClick={() => setModel(k)}><span className="t">{mm.name}{k === "lead" && <span className="badge ok">Best faces</span>}</span><span className="d">{mm.desc}</span><span className="p">{s2} s · {fmt(s2 * mm.rate)} cr</span></button>;
               })}
             </div>
