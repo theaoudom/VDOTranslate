@@ -342,7 +342,7 @@ export class MovieUseCases {
     const sh = (await this.load(id)).shots.find((s) => s.id === shotId)!;
     if (sh.state !== "blocked" || sh.model === FALLBACK_MODEL) return false;
     await this.setShot(id, shotId, {
-      model: FALLBACK_MODEL, sec: fitDuration(sh.sec, FALLBACK_MODEL), state: "queued", frame: null, requestId: null,
+      model: FALLBACK_MODEL, chosenModel: sh.model, sec: fitDuration(sh.sec, FALLBACK_MODEL), state: "queued", frame: null, requestId: null,
       error: `${MODELS[sh.model].model} refused this, so it was made with ${MODELS[FALLBACK_MODEL].model}.`,
     });
     return true;
@@ -398,16 +398,44 @@ export class MovieUseCases {
    * and shots (nothing is written again). A clip starts right away; a movie goes back to
    * its Shots step. Credits are held again only when it starts.
    */
-  async retry(userId: string, id: string): Promise<MovieResult> {
+  /**
+   * `desc` gives a clip new wording (from "Try other wording"). A shot the fallback model
+   * took over goes back to the model the user chose.
+   */
+  async retry(userId: string, id: string, desc?: string): Promise<MovieResult> {
     const m = await this.owned(userId, id);
     if (!m) return fail(404, "Movie not found.");
     if (m.status !== "failed") return fail(409, "This movie didn’t fail.");
-    const shots = m.shots.map((s) => ({ ...s, state: "planned" as const, frame: null, file: null, requestId: null, error: null }));
-    await this.movies.update(id, { status: "draft", held: 0, used: 0, error: null, shots, files: {} });
+    const text = m.settings.kind === "clip" ? desc?.trim().slice(0, 800) : undefined;
+    if (text && !(await this.check(text))) return fail(422, NOT_ALLOWED);
+    const shots = m.shots.map((s) => {
+      const model = s.chosenModel ?? s.model;
+      const sec = s.chosenModel ? remakeSec(m, s, model) : s.sec;
+      return { ...s, ...(text ? { desc: text } : {}), model, sec, chosenModel: null, state: "planned" as const, frame: null, file: null, requestId: null, error: null };
+    });
+    const settings = text ? { ...m.settings, idea: text } : m.settings;
+    await this.movies.update(id, { status: "draft", held: 0, used: 0, error: null, shots, files: {}, settings });
     if (m.settings.kind !== "clip") return { ok: true, movie: (await this.movies.findById(id))! };
     const started = await this.start(userId, id);
     if (!started.ok) await this.movies.update(id, { status: "failed", error: started.message });
     return started;
+  }
+
+  /** Gentler wording for a shot the safety filter refused (free). */
+  async suggestWording(userId: string, id: string, shotId: string, desc: string): Promise<{ ok: true; suggestions: string[] } | { ok: false; status: number; message: string }> {
+    const m = await this.owned(userId, id);
+    const sh = m?.shots.find((s) => s.id === shotId);
+    if (!m || !sh) return fail(404, "Shot not found.");
+    try {
+      const list = await this.writer.suggest(desc.trim().slice(0, 600) || sh.desc);
+      const ok = await Promise.all(list.map((x) => this.check(x).catch(() => false)));
+      const suggestions = list.filter((_, i) => ok[i]);
+      if (!suggestions.length) return fail(422, "No other wording could be suggested. Try describing it differently.");
+      return { ok: true, suggestions };
+    } catch (e) {
+      console.error("[movie] suggest wording", e);
+      return fail(502, "Couldn’t suggest wording right now. Please try again.");
+    }
   }
 
   /* ── Result: make one shot again ── */

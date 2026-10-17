@@ -2,6 +2,10 @@ import { withWorkflow } from "workflow/next";
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  env: {
+    // the deployed version: open pages compare it with /api/version to know when to reload
+    APP_VERSION: process.env.VERCEL_DEPLOYMENT_ID || process.env.VERCEL_GIT_COMMIT_SHA || "dev",
+  },
   experimental: {
     // runs src/instrumentation.ts on startup (local maintenance; Vercel uses a cron instead)
     instrumentationHook: true,

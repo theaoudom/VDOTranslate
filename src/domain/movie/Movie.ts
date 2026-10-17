@@ -86,6 +86,8 @@ export interface Shot {
   /** model request while it's being made */
   requestId?: string | null;
   error?: string | null;
+  /** the model the user chose, when a refusal moved the shot to the fallback model */
+  chosenModel?: ModelTier | null;
   /** while a remake runs: the old shot's model and length (put back if it fails) and what was held */
   remake?: { model: ModelTier; sec: number; held: number } | null;
 }

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { Circle, CircleCheck, Download, Info, LayoutTemplate, Languages, LoaderCircle, OctagonAlert, Pencil, Plus, RefreshCw, Scissors, ShieldAlert } from "lucide-react";
+import { Circle, CircleCheck, Download, Info, LayoutTemplate, Languages, LoaderCircle, OctagonAlert, Pencil, Plus, RefreshCw, Scissors, ShieldAlert, Sparkles } from "lucide-react";
 import { estimateMovie, GENRES, MODELS, remakeModels, remakeSec, shotCost, type ModelTier, type PublicMovie } from "@/domain/movie/Movie";
 import { Modal } from "../../Modal";
 import { useToast } from "../../Toast";
@@ -75,17 +75,48 @@ function Making({ m }: { m: PublicMovie }) {
   );
 }
 
+/** Gentler wording after a refusal: loads on demand, then each one can be picked. */
+function Suggestions({ movieId, shotId, desc, auto, pick, pickLabel }: { movieId: string; shotId: string; desc: string; auto?: boolean; pick: (s: string) => void; pickLabel: string }) {
+  const [list, setList] = useState<string[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function load() {
+    setBusy(true); setError(null);
+    try { setList((await api<{ suggestions: string[] }>(`/api/movies/${movieId}/suggest`, "POST", { shotId, desc })).suggestions); }
+    catch (e) { setError((e as Error).message); }
+    setBusy(false);
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (auto) load(); }, []);
+  if (!list) return (
+    <div className="stack" style={{ gap: 6 }}>
+      <div><button type="button" className="btn sm" disabled={busy} onClick={load}>{busy ? <><LoaderCircle />Finding gentler wording…</> : <><Sparkles />Suggest gentler wording</>}</button></div>
+      {error && <span className="faint t-xs" style={{ color: "var(--rec)" }}>{error}</span>}
+    </div>
+  );
+  return (
+    <div className="rows">
+      {list.map((s) => (
+        <div key={s} className="row">
+          <div className="main"><div className="t-small">{s}</div></div>
+          <button type="button" className="btn sm" onClick={() => pick(s)}>{pickLabel}</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function Failed({ m, onChange }: { m: PublicMovie; onChange: (m: PublicMovie) => void }) {
   const router = useRouter();
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const clip = m.settings.kind === "clip";
-  const price = estimateMovie(m.shots).total;
+  const price = estimateMovie(m.shots.map((s) => (s.chosenModel ? { ...s, model: s.chosenModel, sec: remakeSec(m, s, s.chosenModel) } : s))).total;
   const refused = m.shots.length > 0 && m.shots.every((s) => s.state === "blocked");
-  async function retry() {
+  async function retry(desc?: string) {
     setBusy(true);
     try {
-      const next = await api(`/api/movies/${m.id}/retry`);
+      const next = await api(`/api/movies/${m.id}/retry`, "POST", desc ? { desc } : {});
       if (clip) { toast(`Started again. ${fmt(next.held)} cr held.`); onChange(next); router.refresh(); }
       else router.push(`/app/movie/${m.id}/shots`);
     } catch (e) { toast((e as Error).message, true); setBusy(false); }
@@ -94,11 +125,17 @@ function Failed({ m, onChange }: { m: PublicMovie; onChange: (m: PublicMovie) =>
     <section>
       <PageHead title={m.name} sub={`${clip ? "Quick clip" : GENRES[m.settings.genre].name} · ${m.settings.ratio}`} right={<Link className="btn" href="/app/movie"><Plus />{clip ? "New video" : "New movie"}</Link>} />
       <div className="note rec" style={{ marginBottom: "var(--sp-4)" }}><OctagonAlert /><div><b>{clip ? "This video couldn’t be made." : "This movie couldn’t be made."}</b> {m.error ?? "All held credits were returned."}</div></div>
+      {clip && refused && m.shots[0] && (
+        <div className="panel" style={{ marginBottom: "var(--sp-4)" }}><div className="panel-head"><h3>Try other wording</h3><span className="faint t-xs">Same photos and settings</span></div><div className="panel-body stack">
+          <p className="muted t-small">Gentler ways to say “{m.shots[0].desc}”. Pick one to make it again right away.</p>
+          <Suggestions movieId={m.id} shotId={m.shots[0].id} desc={m.shots[0].desc} auto pick={(s) => { if (!busy) retry(s); }} pickLabel={`Make it · ${fmt(price)} cr`} />
+        </div></div>
+      )}
       <div className="panel"><div className="panel-head"><h3>Try again</h3></div><div className="panel-body stack">
         <p className="muted t-small">{clip ? "Everything you entered is kept: the photos, what happens and the settings." : "Your script, characters and shots are kept. Nothing is written again."}</p>
         <div className="hstack">
           {clip && refused ? <Link className="btn primary" href={`/app/movie?from=${m.id}`}><Pencil />Change and try again</Link> : null}
-          <button className={"btn" + (clip && refused ? "" : " primary")} disabled={busy} onClick={retry}>{busy ? <><LoaderCircle />Starting…</> : <><RefreshCw />{clip ? `${refused ? "Try the same again" : "Try again"} · ${fmt(price)} cr` : "Try again"}</>}</button>
+          <button className={"btn" + (clip && refused ? "" : " primary")} disabled={busy} onClick={() => retry()}>{busy ? <><LoaderCircle />Starting…</> : <><RefreshCw />{clip ? `${refused ? "Try the same again" : "Try again"} · ${fmt(price)} cr` : "Try again"}</>}</button>
           {clip && !refused ? <Link className="btn" href={`/app/movie?from=${m.id}`}><Pencil />Change and try again</Link> : null}
         </div>
       </div></div>
@@ -199,6 +236,7 @@ function Result({ m, onChange }: { m: PublicMovie; onChange: (m: PublicMovie) =>
             <div className="stack">
               {b && <div className="note rec"><ShieldAlert /><div>The safety filter stopped this shot. Describe it without injuries or other blocked content.</div></div>}
               <div className="field"><label className="label" htmlFor="rm-desc">What happens</label><textarea className="textarea" id="rm-desc" rows={3} value={remake.desc} onChange={(e) => setRemake({ ...remake, desc: e.target.value })} /></div>
+              {(b || /refused/.test(sh.error ?? "")) && <Suggestions key={remake.i} movieId={m.id} shotId={sh.id} desc={remake.desc} pick={(s) => setRemake({ ...remake, desc: s })} pickLabel="Use this" />}
               <div className="field"><span className="label">Quality</span>{sh.cast.length > 0 && <span className="hint">With photos, Standard and Lead face keep faces closest to the photos.</span>}
                 <div className="opts" style={{ gridTemplateColumns: "repeat(2,minmax(0,1fr))" }}>
                   {remakeModels(m).map((k) => {

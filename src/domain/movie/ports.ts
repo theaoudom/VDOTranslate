@@ -37,6 +37,11 @@ export interface IMovieWriter {
   read(own: OwnScript, settings: MovieSettings): Promise<WrittenMovie>;
   /** Rewrites one scene with the chosen changes; the rest of the script is context. */
   rewriteScene(scene: Scene, script: Scene[], settings: MovieSettings, tones: string[], ask: string): Promise<Scene>;
+  /**
+   * Gentler ways to say what happens in a shot after a video model's safety filter refused
+   * it: the same people, mood and moment, within the content rules.
+   */
+  suggest(desc: string): Promise<string[]>;
   /** New shots for an edited script. */
   planShots(script: Scene[], cast: Character[], settings: MovieSettings): Promise<Omit<Shot, "model" | "state">[]>;
 }

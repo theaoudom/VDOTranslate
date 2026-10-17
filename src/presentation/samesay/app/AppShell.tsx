@@ -9,6 +9,7 @@ import { BrandMark } from "../BrandMark";
 import { toggleTheme } from "../ThemeToggle";
 import { fmt } from "./format";
 import { SettingsProvider, useOpenSettings } from "./Settings";
+import { UpdateNotice } from "./UpdateNotice";
 
 export interface ShellAccount {
   name: string;
@@ -114,7 +115,7 @@ function Shell({ account, children }: { account: ShellAccount; children: ReactNo
           </div>
         </div>
       </header>
-      <main className="content">{children}</main>
+      <main className="content"><UpdateNotice />{children}</main>
       {drawer && <div className="drawer-scrim" onClick={() => setDrawer(false)} />}
     </div>
   );

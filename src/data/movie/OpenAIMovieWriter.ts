@@ -63,6 +63,12 @@ const SHOTS_SCHEMA = {
   schema: { type: "object", additionalProperties: false, required: ["shots"], properties: { shots: SCHEMA.schema.properties.shots } },
 };
 
+const SUGGEST_SCHEMA = {
+  name: "suggestions",
+  strict: true,
+  schema: { type: "object", additionalProperties: false, required: ["suggestions"], properties: { suggestions: { type: "array", items: { type: "string" } } } },
+};
+
 type Raw = { name: string; scenes: Omit<Scene, "id">[]; characters: { name: string; role: string; desc: string }[]; shots: { scene: number; title: string; desc: string; sec: number; kind: ShotKind; cast: string[]; say: string }[] };
 
 async function chat<T>(model: string, messages: unknown[], schema: object): Promise<T> {
@@ -145,6 +151,14 @@ export class OpenAIMovieWriter implements IMovieWriter {
       { role: "user", content: `${brief(s)}\nWhole script for context:\n${JSON.stringify(script.map(({ id: _id, ...x }) => x))}\n\nRewrite only this scene:\n${JSON.stringify({ place: scene.place, time: scene.time, text: scene.text, lines: scene.lines })}\nChanges wanted: ${[...tones, ask].filter(Boolean).join("; ")}` },
     ], SCENE_SCHEMA);
     return { id: scene.id, place: raw.place, time: TIMES.includes(raw.time) ? raw.time : scene.time, text: raw.text, lines: raw.lines ?? [] };
+  }
+
+  async suggest(desc: string): Promise<string[]> {
+    const raw = await chat<{ suggestions: string[] }>(WRITER, [
+      { role: "system", content: `A video model's safety filter refused the description of a short AI video, which may be made from photos of real adults who agreed to it. Write 3 different ways to describe it that keep what the user wants (the same people, mood and main moment) but are gentle and concrete: what the camera sees, the setting, the light, the feeling. A kiss stays a short, soft kiss. Never add anything the user didn't ask for. Each one is a single sentence of at most 160 characters, in English. ${RULES}` },
+      { role: "user", content: desc.slice(0, 600) },
+    ], SUGGEST_SCHEMA);
+    return (raw.suggestions ?? []).map((x) => x.trim()).filter(Boolean).slice(0, 3);
   }
 
   async planShots(script: Scene[], cast: Character[], s: MovieSettings): Promise<Omit<Shot, "model" | "state">[]> {

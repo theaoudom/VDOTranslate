@@ -14,6 +14,8 @@ export const maxDuration = 300;
  * photo    { characterId, key, consent }   use the user's photo   · DELETE photo → back to an AI face
  * make                                     hold the price and make the movie
  * remake   { shotId, desc, model? }        make one shot again, optionally with another model
+ * retry    { desc? }                       make a failed one again (a clip with new wording)
+ * suggest  { shotId, desc }                gentler wording after a refusal → { suggestions }
  */
 export async function POST(req: NextRequest, { params }: { params: { id: string; action: string } }) {
   const auth = await requireUser();
@@ -37,7 +39,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string;
       break;
     }
     case "retry": {
-      r = await movies.retry(uid, id);
+      r = await movies.retry(uid, id, typeof body?.desc === "string" ? body.desc : undefined);
       if (r.ok && r.movie.status === "making") {
         try { await start(makeMovie, [id, r.movie.shots.map((s) => s.id)]); }
         catch (e) { console.error("[movie] couldn't start", e); await movies.failMovie(id, "We couldn’t start making it. All held credits were returned."); return NextResponse.json({ error: "We couldn’t start. Your credits were returned. Please try again." }, { status: 503 }); }
@@ -48,6 +50,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string;
       r = await movies.startRemake(uid, id, String(body?.shotId ?? ""), String(body?.desc ?? ""), body?.model ? (String(body.model) as ModelTier) : undefined);
       if (r.ok) await start(remakeMovieShot, [id, String(body.shotId)]);
       break;
+    }
+    case "suggest": {
+      const s = await movies.suggestWording(uid, id, String(body?.shotId ?? ""), String(body?.desc ?? ""));
+      return s.ok ? NextResponse.json({ suggestions: s.suggestions }) : NextResponse.json({ error: s.message }, { status: s.status });
     }
     default: return NextResponse.json({ error: "Unknown action." }, { status: 404 });
   }
