@@ -9,7 +9,8 @@ import { BlockedContentError, type IMovieMedia, type ShotCheck } from "@/domain/
 /*
  * Free test mode (MOVIE_TEST_MODE=1): pictures and clips are made locally with ffmpeg
  * instead of by the AI models, so the whole flow can be tried without spending money.
- * Put "TEST-BLOCK" in a shot to see how a blocked shot behaves.
+ * Put "TEST-BLOCK" in a shot to see how a blocked shot behaves, or "TEST-REFUSE" to have
+ * every model but the fallback (Draft) refuse it.
  */
 const FFMPEG = ffmpegPath as unknown as string;
 const run = (args: string[]) => new Promise<void>((resolve, reject) => {
@@ -44,7 +45,7 @@ export class TestMovieMedia implements IMovieMedia {
   }
 
   async startShot(tier: ModelTier, prompt: string, _framePath: string | null, sec: number, ratio: MovieRatio) {
-    if (prompt.includes("TEST-BLOCK")) throw new BlockedContentError("The shot was blocked by the safety filter.");
+    if (prompt.includes("TEST-BLOCK") || (prompt.includes("TEST-REFUSE") && tier !== "draft")) throw new BlockedContentError("The shot was blocked by the safety filter.");
     return `test|${tier}|${sec}|${ratio}|${Date.now()}`;
   }
 

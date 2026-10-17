@@ -158,22 +158,37 @@ async function movieFinishRemake(id: string, shotId: string) {
   return buildMovies().finishRemake(id, shotId);
 }
 
-/** One shot: first frame, then the video model; waits between checks without holding a function. */
-async function makeShot(id: string, shotId: string) {
-  if (!(await movieFrame(id, shotId))) return;
-  if (!(await movieStartShot(id, shotId))) return;
+async function movieFallback(id: string, shotId: string) {
+  "use step";
+  return buildMovies().fallbackShot(id, shotId);
+}
+
+/** One try at a shot: first frame, then the video model; waits between checks without holding a function. */
+async function tryShot(id: string, shotId: string): Promise<"done" | "blocked" | "failed"> {
+  if (!(await movieFrame(id, shotId))) return "blocked";
+  if (!(await movieStartShot(id, shotId))) return "blocked";
   for (let i = 0; i < 90; i++) { // up to ~15 minutes
     await sleep("10s");
-    if ((await movieCheckShot(id, shotId)) !== "running") return;
+    const r = await movieCheckShot(id, shotId);
+    if (r !== "running") return r;
   }
   await movieShotTimeout(id, shotId);
+  return "failed";
+}
+
+/**
+ * One shot. With `fallback`, a shot the safety filter refused gets one more try on the
+ * fallback model. Remakes don't, as their held credits are settled at the shot's model.
+ */
+async function makeShot(id: string, shotId: string, fallback = false) {
+  if ((await tryShot(id, shotId)) === "blocked" && fallback && (await movieFallback(id, shotId))) await tryShot(id, shotId);
 }
 
 /** Make every shot of a movie (two at a time), join them, then charge what was made. */
 export async function makeMovie(id: string, shotIds: string[]) {
   "use workflow";
   try {
-    for (let i = 0; i < shotIds.length; i += 2) await Promise.all(shotIds.slice(i, i + 2).map((s) => makeShot(id, s)));
+    for (let i = 0; i < shotIds.length; i += 2) await Promise.all(shotIds.slice(i, i + 2).map((s) => makeShot(id, s, true)));
     await movieJoin(id);
     await movieFinish(id);
   } catch {

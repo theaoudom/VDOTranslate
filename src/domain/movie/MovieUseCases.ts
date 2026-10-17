@@ -11,6 +11,8 @@ import { BlockedContentError, type IMovieMedia, type IMovieRepository, type IMov
 
 export type MovieResult<T = Movie> = { ok: true; movie: T } | { ok: false; status: number; message: string };
 
+/** Where a refused shot gets its second try (see fallbackShot). */
+const FALLBACK_MODEL: ModelTier = "draft";
 const NOT_ALLOWED = "This kind of content can’t be made. Sexual content and real people aren’t allowed.";
 const fail = (status: number, message: string) => ({ ok: false as const, status, message });
 const hue = (s: string) => Array.from(s).reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 360, 17);
@@ -328,6 +330,22 @@ export class MovieUseCases {
     }
     await this.setShot(id, shotId, { state: r.state, error: r.reason, requestId: null });
     return r.state;
+  }
+
+  /**
+   * The model's safety filter refused the shot: one more try on Veo 3.1 Lite from a first
+   * frame. Its filter often accepts what another model refused, and it is the cheapest
+   * model, so the credits already held always cover it. Returns false when there is no
+   * other model to try.
+   */
+  async fallbackShot(id: string, shotId: string): Promise<boolean> {
+    const sh = (await this.load(id)).shots.find((s) => s.id === shotId)!;
+    if (sh.state !== "blocked" || sh.model === FALLBACK_MODEL) return false;
+    await this.setShot(id, shotId, {
+      model: FALLBACK_MODEL, sec: fitDuration(sh.sec, FALLBACK_MODEL), state: "queued", frame: null, requestId: null,
+      error: `${MODELS[sh.model].model} refused this, so it was made with ${MODELS[FALLBACK_MODEL].model}.`,
+    });
+    return true;
   }
 
   /** The model took too long: the shot counts as failed (not charged). */
