@@ -81,6 +81,7 @@ function Failed({ m, onChange }: { m: PublicMovie; onChange: (m: PublicMovie) =>
   const [busy, setBusy] = useState(false);
   const clip = m.settings.kind === "clip";
   const price = estimateMovie(m.shots).total;
+  const refused = m.shots.length > 0 && m.shots.every((s) => s.state === "blocked");
   async function retry() {
     setBusy(true);
     try {
@@ -96,8 +97,9 @@ function Failed({ m, onChange }: { m: PublicMovie; onChange: (m: PublicMovie) =>
       <div className="panel"><div className="panel-head"><h3>Try again</h3></div><div className="panel-body stack">
         <p className="muted t-small">{clip ? "Everything you entered is kept: the photos, what happens and the settings." : "Your script, characters and shots are kept. Nothing is written again."}</p>
         <div className="hstack">
-          <button className="btn primary" disabled={busy} onClick={retry}>{busy ? <><LoaderCircle />Starting…</> : <><RefreshCw />{clip ? `Try again · ${fmt(price)} cr` : "Try again"}</>}</button>
-          {clip ? <Link className="btn" href={`/app/movie?from=${m.id}`}><Pencil />Change and try again</Link> : null}
+          {clip && refused ? <Link className="btn primary" href={`/app/movie?from=${m.id}`}><Pencil />Change and try again</Link> : null}
+          <button className={"btn" + (clip && refused ? "" : " primary")} disabled={busy} onClick={retry}>{busy ? <><LoaderCircle />Starting…</> : <><RefreshCw />{clip ? `${refused ? "Try the same again" : "Try again"} · ${fmt(price)} cr` : "Try again"}</>}</button>
+          {clip && !refused ? <Link className="btn" href={`/app/movie?from=${m.id}`}><Pencil />Change and try again</Link> : null}
         </div>
       </div></div>
     </section>

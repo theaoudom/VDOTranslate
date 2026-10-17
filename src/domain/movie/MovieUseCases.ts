@@ -358,7 +358,11 @@ export class MovieUseCases {
     if (m.status !== "making") return;
     const used = Math.min(m.held, m.shots.filter((s) => s.state === "done").reduce((a, s) => a + shotCost(s), 0));
     await this.credits.settle(m.userId, m.held, used, m.name);
-    await this.movies.update(id, { status: m.files.video ? "done" : "failed", used, error: m.files.video ? null : "No shot could be made. All held credits were returned." });
+    const refused = m.shots.length > 0 && m.shots.every((s) => s.state === "blocked");
+    const error = m.files.video ? null
+      : refused ? `The video model’s safety filter refused ${m.settings.kind === "clip" ? "this video" : "every shot"}. All held credits were returned. The same request will likely be refused again, so change the wording or use other photos.`
+      : "No shot could be made. All held credits were returned.";
+    await this.movies.update(id, { status: m.files.video ? "done" : "failed", used, error });
   }
 
   async failMovie(id: string, message: string) {

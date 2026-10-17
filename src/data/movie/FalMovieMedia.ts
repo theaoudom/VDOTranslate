@@ -57,7 +57,9 @@ function client() {
 function isBlocked(e: unknown) {
   const err = e as { status?: number; body?: unknown; message?: string };
   const text = `${err?.message ?? ""} ${JSON.stringify(err?.body ?? "")}`.toLowerCase();
-  return /content[ _-]?policy|safety|nsfw|moderation|prohibited|sensitive|not allowed|flagged/.test(text);
+  const blocked = /content[ _-]?policy|safety|nsfw|moderation|prohibited|sensitive|not allowed|flagged/.test(text);
+  if (blocked) console.warn("[fal] refused by the model's content filter:", text.slice(0, 400));
+  return blocked;
 }
 
 async function upload(file: string): Promise<string> {
